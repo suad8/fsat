@@ -1,0 +1,206 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+
+import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
+
+const SORT_OPTIONS = [
+  { value: "featured", label: "الأكثر طلبًا" },
+  { value: "priceAsc", label: "السعر: من الأقل" },
+  { value: "priceDesc", label: "السعر: من الأعلى" },
+  { value: "newest", label: "الأحدث" },
+] as const;
+
+/**
+ * فلاتر المتجر.
+ *
+ * الحالة كلها في عنوان الصفحة (searchParams) لا في حالة React، فيبقى الرابط
+ * قابلاً للمشاركة والحفظ، ويعمل زر الرجوع في المتصفّح كما يتوقّع المستخدم.
+ */
+export function ShopFilters({
+  categories,
+  activeCategory,
+  resultCount,
+}: {
+  categories: { slug: string; name: string; count: number }[];
+  activeCategory?: string;
+  resultCount: number;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const currentSort = searchParams.get("sort") ?? "featured";
+  const currentSearch = searchParams.get("q") ?? "";
+
+  /*
+   * مزامنة حقل البحث عند تغيّر الرابط من الخارج (زر الرجوع مثلاً).
+   * الضبط أثناء الرسم — لا داخل effect — هو النمط الذي يوصي به React
+   * لتعديل الحالة عند تغيّر قيمة قادمة من الأعلى: React يعيد الرسم فورًا
+   * قبل عرض أي شيء للمستخدم، فلا وميض ولا رسمة ضائعة.
+   */
+  const [searchValue, setSearchValue] = useState(currentSearch);
+  const [syncedSearch, setSyncedSearch] = useState(currentSearch);
+
+  if (syncedSearch !== currentSearch) {
+    setSyncedSearch(currentSearch);
+    setSearchValue(currentSearch);
+  }
+
+  function updateParam(key: string, value: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(key, value);
+    else params.delete(key);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  return (
+    <div className="mb-8 space-y-5">
+      {/* البحث والترتيب */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <form
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            updateParam("q", searchValue.trim() || null);
+          }}
+          className="relative flex-1"
+        >
+          <label htmlFor="shop-search" className="sr-only">
+            ابحث في المنتجات
+          </label>
+          {/*
+            الأيقونة في جهة البداية (يمين الواجهة العربية)، لذا الحشو الكبير
+            يجب أن يكون ps لا pe — عكسهما يجعل النص يمرّ تحت الأيقونة.
+          */}
+          <Icon
+            name="search"
+            className="text-primary-400 pointer-events-none absolute inset-y-0 start-3.5 my-auto size-4.5"
+          />
+          <input
+            id="shop-search"
+            type="search"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+            placeholder="ابحث عن منتج…"
+            className="border-border-strong bg-surface text-primary-900 placeholder:text-primary-400 hover:border-primary-400 focus-visible:outline-accent-600 w-full rounded-lg border py-2.5 ps-11 pe-4 text-sm transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-1"
+          />
+        </form>
+
+        <div className="flex items-center gap-2">
+          <label htmlFor="shop-sort" className="text-primary-600 shrink-0 text-sm">
+            ترتيب حسب
+          </label>
+          <div className="relative">
+            <select
+              id="shop-sort"
+              value={currentSort}
+              onChange={(event) => updateParam("sort", event.target.value)}
+              className="border-border-strong bg-surface text-primary-900 hover:border-primary-400 focus-visible:outline-accent-600 appearance-none rounded-lg border py-2.5 ps-4 pe-10 text-sm font-medium transition-colors focus:outline-none focus-visible:outline-2"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Icon
+              name="chevronDown"
+              className="text-primary-400 pointer-events-none absolute inset-y-0 left-3 my-auto size-4"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* شرائط التصنيفات — قابلة للتمرير أفقيًا على الجوال */}
+      <nav aria-label="تصنيفات المنتجات">
+        <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <li>
+            <CategoryChip
+              href={buildHref("/shop", searchParams)}
+              active={!activeCategory}
+            >
+              الكل
+            </CategoryChip>
+          </li>
+          {categories.map((category) => (
+            <li key={category.slug}>
+              <CategoryChip
+                href={buildHref(`/shop/${category.slug}`, searchParams)}
+                active={activeCategory === category.slug}
+              >
+                {category.name}
+                <span className="text-[0.7rem] opacity-70">({category.count})</span>
+              </CategoryChip>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* عدد النتائج ومسح الفلاتر */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p aria-live="polite" className="text-primary-600 text-sm">
+          {resultCount === 0
+            ? "لا توجد نتائج"
+            : `${resultCount} ${resultCount === 1 ? "منتج" : "منتجات"}`}
+          {currentSearch ? (
+            <>
+              {" "}
+              لكلمة <span className="text-primary-900 font-bold">«{currentSearch}»</span>
+            </>
+          ) : null}
+        </p>
+
+        {currentSearch || currentSort !== "featured" || activeCategory ? (
+          <Link
+            href="/shop"
+            className="text-accent-700 hover:text-accent-800 inline-flex items-center gap-1 text-sm font-bold transition-colors"
+          >
+            <Icon name="close" className="size-3.5" strokeWidth={2.5} />
+            مسح الفلاتر
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** يحافظ على البحث والترتيب عند التنقّل بين التصنيفات. */
+function buildHref(base: string, params: URLSearchParams): string {
+  const kept = new URLSearchParams();
+  const q = params.get("q");
+  const sort = params.get("sort");
+  if (q) kept.set("q", q);
+  if (sort && sort !== "featured") kept.set("sort", sort);
+  const query = kept.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+function CategoryChip({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold whitespace-nowrap transition-colors",
+        "focus-visible:outline-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2",
+        active
+          ? "bg-primary-950 text-white"
+          : "bg-surface-sunken text-primary-700 hover:bg-primary-200",
+      )}
+    >
+      {children}
+    </Link>
+  );
+}

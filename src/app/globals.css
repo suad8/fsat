@@ -1,0 +1,323 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   لوحة ألوان الهوية — الورقة الذهبية (GPC)
+   --------------------------------------------------------------------------
+   مستخرجة من ملف هوية الشركة:
+
+     • بنفسجي حيوي   #5B33F5  → تدرّج brand   (الشعار، اللمسات المميّزة)
+     • بنفسجي داكن   #3A2570  → تدرّج primary (الأسطح الداكنة والنصوص)
+     • ذهبي          #FBC02D  → تدرّج accent  (أزرار الإجراء الرئيسية)
+     • ذهبي فاتح     #FADF92  → accent-300    (النصوص فوق الخلفيات الداكنة)
+
+   ⚠️ الأكواد أعلاه مقروءة من صور الهوية بصريًا. أرسل قيم HEX الرسمية إن
+      كانت لديك في دليل الهوية لضبطها بدقة تامة.
+
+   ملاحظة على التباين: الذهبي فاتح، لذا الأزرار الذهبية تحمل نصًا بنفسجيًا
+   داكنًا لا أبيض — تمامًا كما يظهر الشعار في ملف الهوية.
+   ========================================================================== */
+
+@theme {
+  /* --- البنفسجي الداكن: الأسطح الداكنة والنصوص --- */
+  --color-primary-50: #f5f3fb;
+  --color-primary-100: #ebe7f6;
+  --color-primary-200: #d8d0ee;
+  --color-primary-300: #bcaee0;
+  --color-primary-400: #9b85ce;
+  --color-primary-500: #7e63ba;
+  --color-primary-600: #674da0;
+  --color-primary-700: #553f83;
+  --color-primary-800: #47366b;
+  --color-primary-900: #3a2570;
+  --color-primary-950: #261747;
+
+  /* --- الذهبي: أزرار الإجراء والتمييز --- */
+  --color-accent-50: #fefaed;
+  --color-accent-100: #fdf3d2;
+  --color-accent-200: #fce7a0;
+  --color-accent-300: #fadf92;
+  --color-accent-400: #fbcf57;
+  --color-accent-500: #fbc02d;
+  --color-accent-600: #e5a511;
+  /* 700 و 800 مُعتَّمان عمدًا: يُستخدمان كنص على خلفية بيضاء، والذهبي الفاتح
+     لا يبلغ تباين AA هناك (٣٫٩٩:١). هاتان الدرجتان تعطيان ٥٫٥:١ فأعلى. */
+  --color-accent-700: #8a6109;
+  --color-accent-800: #6f4e08;
+  --color-accent-900: #6f5011;
+  --color-accent-950: #402d06;
+
+  /*
+    ألوان النص فوق الألوان الأساسية.
+    تُحسب تلقائيًا من سطوع كل لون عند حفظ الثيم (src/lib/theme.ts)، فتبقى
+    الأزرار مقروءة مهما كان اللون الذي تختاره الإدارة. القيم هنا هي
+    الافتراضي قبل أي تخصيص.
+  */
+  --color-accent-contrast: #261747;
+  --color-brand-contrast: #ffffff;
+  --color-primary-contrast: #ffffff;
+
+  /* --- البنفسجي الحيوي: لون الشعار واللمسات المميّزة --- */
+  --color-brand-50: #f0ecfe;
+  --color-brand-100: #e3dafd;
+  --color-brand-200: #cbbbfc;
+  --color-brand-300: #ac92f9;
+  --color-brand-400: #8863f7;
+  --color-brand-500: #6b41f6;
+  --color-brand-600: #5b33f5;
+  --color-brand-700: #4a1fe0;
+  --color-brand-800: #3d1bb8;
+  --color-brand-900: #341a94;
+  --color-brand-950: #1f0e63;
+
+  /* --- ألوان دلالية (ثابتة، لا تتبع الهوية) --- */
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  --color-info-50: #eff6ff;
+  --color-info-100: #dbeafe;
+  --color-info-500: #3b82f6;
+  --color-info-600: #2563eb;
+  --color-info-700: #1d4ed8;
+
+  /* --- الأسطح: بيضاء مائلة قليلاً نحو البنفسجي لتتناغم مع الهوية --- */
+  --color-surface: #ffffff;
+  --color-surface-muted: #faf9fd;
+  --color-surface-sunken: #f3f1f9;
+  --color-border: #e6e2f0;
+  --color-border-strong: #d2cbe4;
+
+  /* --- الخطوط --- */
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-display: var(--font-heading), var(--font-body), system-ui, sans-serif;
+
+  /* --- الانحناءات --- */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+
+  /* --- الظلال: مصبوغة بالبنفسجي الداكن بدل الأسود الحيادي --- */
+  --shadow-card: 0 1px 2px rgb(38 23 71 / 0.05), 0 4px 16px rgb(38 23 71 / 0.06);
+  --shadow-card-hover: 0 2px 4px rgb(38 23 71 / 0.06), 0 12px 32px rgb(38 23 71 / 0.12);
+  --shadow-pop: 0 8px 40px rgb(38 23 71 / 0.2);
+
+  /* --- منحنيات الحركة --- */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* --- أقصى عرض للحاوية --- */
+  --container-page: 80rem;
+}
+
+/* ==========================================================================
+   الأساسيات
+   ========================================================================== */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* يمنع اختفاء المحتوى خلف الترويسة الثابتة عند التنقل بالمرساة */
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-primary-900);
+    font-family: var(--font-sans);
+    /* الأرقام العربية الشرقية تُربك عرض الأسعار — نثبّت الأرقام اللاتينية */
+    font-variant-numeric: lining-nums tabular-nums;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.25;
+    text-wrap: balance;
+    color: var(--color-primary-950);
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* حلقة تركيز واضحة وموحّدة لإمكانية الوصول */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-600);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  /* حقول يبقى محتواها LTR رغم أن الواجهة RTL */
+  input[type="tel"],
+  input[type="email"],
+  input[type="url"],
+  input[type="number"] {
+    direction: ltr;
+    text-align: right;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-200);
+    color: var(--color-primary-950);
+  }
+}
+
+/* ==========================================================================
+   أدوات مساعدة
+   ========================================================================== */
+
+@utility container-page {
+  width: 100%;
+  max-width: var(--container-page);
+  margin-inline: auto;
+  padding-inline: 1rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 2rem;
+  }
+}
+
+/* تباعد رأسي موحّد بين أقسام الصفحة */
+@utility section-y {
+  padding-block: 3.5rem;
+
+  @media (width >= 48rem) {
+    padding-block: 5rem;
+  }
+  @media (width >= 64rem) {
+    padding-block: 6rem;
+  }
+}
+
+/* إخفاء شريط التمرير مع إبقاء التمرير فعّالاً (فلاتر أفقية على الجوال) */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   الحركات — خفيفة ومبنية على CSS فقط، بلا مكتبات
+   ========================================================================== */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.55s var(--ease-out-soft) both;
+}
+
+@utility animate-fade-in {
+  animation: fade-in 0.4s var(--ease-out-soft) both;
+}
+
+@utility animate-scale-in {
+  animation: scale-in 0.22s var(--ease-out-soft) both;
+}
+
+/*
+  ظهور العناصر عند التمرير.
+  يعتمد على IntersectionObserver الذي يضيف .is-visible (انظر components/site/Reveal).
+  الحالة الابتدائية تُطبَّق فقط عند السماح بالحركة، حتى لا يختفي المحتوى
+  نهائيًا لمن يعطّل الحركات أو عند تعطّل الـ JavaScript.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 0.6s var(--ease-out-soft),
+      transform 0.6s var(--ease-out-soft);
+  }
+
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   الطباعة (الفواتير وتفاصيل الطلب)
+   ========================================================================== */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}

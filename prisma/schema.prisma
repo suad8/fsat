@@ -1,0 +1,722 @@
+// ============================================================================
+//  مخطط قاعدة البيانات — موقع الطباعة والتجهيزات الدعائية
+// ----------------------------------------------------------------------------
+//  المزوّد: SQLite للتطوير. للانتقال إلى PostgreSQL في الإنتاج غيّر `provider`
+//  إلى "postgresql" و DATABASE_URL — لا حاجة لتعديل أي نموذج، فكل الأنواع
+//  المستخدمة هنا مدعومة في المزوّدين.
+//
+//  ملاحظة: SQLite لا يدعم enum في Prisma، لذا تُستخدم حقول String مع توثيق
+//  القيم المسموحة أعلى كل حقل، وتُفرض القيم فعليًا عبر Zod في طبقة التطبيق
+//  (src/lib/validation) وعبر ثوابت TypeScript في src/lib/constants.ts.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================================================
+//  المتجر — التصنيفات والمنتجات
+// ============================================================================
+
+model Category {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String?
+  imageUrl    String?
+  imageAlt    String?
+  /// مفتاح أيقونة من src/components/ui/Icon.tsx
+  iconKey     String?
+
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+
+  seoTitle       String?
+  seoDescription String?
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([isActive, order])
+}
+
+model Product {
+  id               String  @id @default(cuid())
+  slug             String  @unique
+  name             String
+  shortDescription String?
+  description      String?
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  /// FIXED = سعر ثابت | STARTS_FROM = يبدأ من | QUOTE_ONLY = بعرض سعر فقط
+  priceMode      String  @default("FIXED")
+  /// سعر الوحدة الأساسي قبل معدّلات الخيارات وشرائح الكميات
+  basePrice      Float   @default(0)
+  /// السعر قبل الخصم — يُعرض مشطوبًا عند وجوده
+  compareAtPrice Float?
+
+  /// وحدة البيع: قطعة، عبوة، متر مربع، ألف حبة …
+  unit         String @default("قطعة")
+  minQuantity  Int    @default(1)
+  quantityStep Int    @default(1)
+
+  sku String?
+
+  isActive   Boolean @default(true)
+  isFeatured Boolean @default(false)
+  order      Int     @default(0)
+
+  /// مدة التنفيذ كنص حرّ: "٣ – ٥ أيام عمل"
+  leadTime String?
+
+  seoTitle       String?
+  seoDescription String?
+
+  images        ProductImage[]
+  optionGroups  OptionGroup[]
+  quantityTiers QuantityTier[]
+  orderItems    OrderItem[]
+  services      Service[]      @relation("ServiceProducts")
+  projects      Project[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId, isActive])
+  @@index([isFeatured, isActive])
+  @@index([order])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  url    String
+  /// النص البديل — إلزامي لإمكانية الوصول وتحسين محركات البحث
+  alt    String
+  width  Int?
+  height Int?
+  order  Int    @default(0)
+
+  @@index([productId, order])
+}
+
+// ============================================================================
+//  نظام خيارات المنتجات
+// ============================================================================
+
+model OptionGroup {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// الاسم المعروض: المقاس، الخامة، اللون، نوع الطباعة …
+  name String
+  /// مفتاح ثابت يُستخدم في رسالة واتساب وفي بنود الطلب: size, material …
+  key  String
+  /// SELECT | RADIO | COLOR | NUMBER | TEXT | TEXTAREA | CHECKBOX | FILE | DATE
+  type String @default("SELECT")
+
+  helpText   String?
+  isRequired Boolean @default(true)
+  order      Int     @default(0)
+
+  values OptionValue[]
+
+  @@unique([productId, key])
+  @@index([productId, order])
+}
+
+model OptionValue {
+  id      String      @id @default(cuid())
+  groupId String
+  group   OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  label String
+  value String
+
+  /// قيمة معدّل السعر، تُفسَّر حسب priceMode أدناه
+  priceModifier Float  @default(0)
+  /// ADD = يضاف مرة واحدة للطلب
+  /// ADD_PER_UNIT = يضاف لسعر كل وحدة
+  /// MULTIPLY = يضرب سعر الوحدة (1.25 = زيادة 25%)
+  /// OVERRIDE_UNIT = يستبدل سعر الوحدة بالكامل
+  priceMode     String @default("ADD_PER_UNIT")
+
+  /// لون العيّنة لخيارات النوع COLOR
+  swatchHex String?
+  imageUrl  String?
+
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+  order     Int     @default(0)
+
+  @@index([groupId, order])
+}
+
+/// شرائح تسعير الكميات — أساسية في الطباعة، فسعر الحبة ينخفض كلما زادت الكمية.
+model QuantityTier {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  minQty Int
+  /// null تعني "وما فوق"
+  maxQty Int?
+  /// سعر الوحدة ضمن هذه الشريحة
+  unitPrice Float
+  label     String?
+  order     Int     @default(0)
+
+  @@index([productId, minQty])
+}
+
+// ============================================================================
+//  الطلبات والعملاء
+// ============================================================================
+
+model Customer {
+  id          String  @id @default(cuid())
+  phone       String  @unique
+  name        String
+  email       String?
+  companyName String?
+  city        String?
+  notes       String?
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Order {
+  id          String @id @default(cuid())
+  orderNumber String @unique
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  companyName   String?
+
+  /// PICKUP = استلام من الفرع | DELIVERY = شحن
+  fulfillment String  @default("DELIVERY")
+  city        String?
+  district    String?
+  addressLine String?
+  postalCode  String?
+
+  /// BANK_TRANSFER | ONLINE | COD | ON_PICKUP
+  paymentMethod String
+  /// PENDING | PAID | REFUNDED | FAILED
+  paymentStatus String @default("PENDING")
+  /// NEW | CONFIRMED | IN_PRODUCTION | READY | SHIPPED | DELIVERED | CANCELLED
+  status        String @default("NEW")
+
+  subtotal       Float
+  discountAmount Float   @default(0)
+  couponCode     String?
+  shippingCost   Float   @default(0)
+  vatAmount      Float   @default(0)
+  total          Float
+
+  notes      String?
+  adminNotes String?
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  /// لقطة من بيانات المنتج وقت الطلب — تبقى صحيحة حتى لو عُدّل المنتج أو حُذف
+  productName String
+  productSlug String
+  imageUrl    String?
+
+  /// [{ key, label, value, valueLabel }]
+  selectedOptions Json?
+  /// [{ name, url, size, mimeType }]
+  uploadedFiles   Json?
+
+  quantity  Int
+  unitPrice Float
+  lineTotal Float
+  notes     String?
+
+  @@index([orderId])
+}
+
+// ============================================================================
+//  طلبات عروض الأسعار
+// ============================================================================
+
+model QuoteRequest {
+  id        String @id @default(cuid())
+  reference String @unique
+
+  customerName String
+  companyName  String?
+  phone        String
+  email        String?
+  city         String
+
+  /// نوع المنتج أو الخدمة المطلوبة
+  productType String
+  /// ربط اختياري بمنتج من المتجر عند إرسال الطلب من صفحة منتج
+  productSlug String?
+  size        String?
+  quantity    String?
+  description String
+
+  dueDate DateTime?
+
+  /// WHATSAPP | PHONE | EMAIL
+  preferredContact String @default("WHATSAPP")
+
+  /// [{ kind: DESIGN|LOGO|REFERENCE, name, url, size, mimeType }]
+  attachments Json?
+
+  /// إجابات الحقول المخصّصة التي عرّفتها الإدارة في قالب النموذج.
+  /// [{ key, label, value }] — تُخزَّن مع تسميتها وقت الإرسال حتى تبقى
+  /// الطلبات القديمة مقروءة حتى لو أُعيد تسمية الحقل أو حُذف لاحقًا.
+  customFields Json?
+
+  /// NEW | IN_REVIEW | QUOTED | WON | LOST
+  status       String  @default("NEW")
+  quotedAmount Float?
+  adminNotes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/// حقل في قالب نموذج طلب عرض السعر.
+///
+/// يتيح للإدارة تخصيص النموذج بالكامل دون كود: إضافة حقول، إعادة تسميتها،
+/// جعلها إلزامية، إخفاؤها، وإعادة ترتيبها.
+///
+/// حقول النظام (isSystem) لها منطق مرتبط بها في الكود — تُخفى وتُعاد تسميتها
+/// لكن لا تُحذف. أما حقول الإدارة فتُحذف بحرية.
+model QuoteFormField {
+  id String @id @default(cuid())
+
+  /// مفتاح ثابت تُخزَّن به الإجابة. لا يتغيّر بعد الإنشاء.
+  key   String @unique
+  label String
+
+  /// TEXT | TEXTAREA | NUMBER | SELECT | RADIO | CHECKBOX | DATE | EMAIL | PHONE
+  type String @default("TEXT")
+
+  placeholder String?
+  helpText    String?
+
+  isRequired Boolean @default(false)
+  isActive   Boolean @default(true)
+  isSystem   Boolean @default(false)
+
+  /// مصفوفة نصية بالخيارات — للأنواع SELECT و RADIO و CHECKBOX
+  options Json?
+
+  /// HALF = نصف عرض الشبكة | FULL = العرض الكامل
+  width String @default("HALF")
+
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+}
+
+// ============================================================================
+//  معرض الأعمال
+// ============================================================================
+
+model ProjectCategory {
+  id       String  @id @default(cuid())
+  slug     String  @unique
+  name     String
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+
+  projects Project[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id    String @id @default(cuid())
+  slug  String @unique
+  title String
+
+  categoryId String
+  category   ProjectCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  clientName  String?
+  summary     String?
+  description String?
+  /// الخامات المستخدمة
+  materials   String?
+  dimensions  String?
+  /// تقنيات التنفيذ
+  techniques  String?
+
+  completedAt DateTime?
+
+  relatedProductId String?
+  relatedProduct   Product? @relation(fields: [relatedProductId], references: [id], onDelete: SetNull)
+
+  isFeatured Boolean @default(false)
+  isActive   Boolean @default(true)
+  order      Int     @default(0)
+
+  seoTitle       String?
+  seoDescription String?
+
+  images ProjectImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId, isActive])
+  @@index([isFeatured, isActive])
+}
+
+model ProjectImage {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  url     String
+  alt     String
+  caption String?
+  /// RESULT = النتيجة النهائية | BEFORE | AFTER | PROCESS = مرحلة تنفيذ
+  stage   String  @default("RESULT")
+  width   Int?
+  height  Int?
+  order   Int     @default(0)
+
+  @@index([projectId, order])
+}
+
+// ============================================================================
+//  الخدمات والمعدات
+// ============================================================================
+
+model Service {
+  id               String  @id @default(cuid())
+  slug             String  @unique
+  title            String
+  shortDescription String
+  description      String?
+
+  iconKey  String?
+  imageUrl String?
+  imageAlt String?
+
+  /// مصفوفة نصية بأهم مميزات الخدمة
+  highlights Json?
+
+  isActive   Boolean @default(true)
+  isFeatured Boolean @default(true)
+  order      Int     @default(0)
+
+  seoTitle       String?
+  seoDescription String?
+
+  products Product[]      @relation("ServiceProducts")
+  images   ServiceImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+}
+
+model ServiceImage {
+  id        String  @id @default(cuid())
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  url   String
+  alt   String
+  order Int    @default(0)
+
+  @@index([serviceId, order])
+}
+
+model Equipment {
+  id          String  @id @default(cuid())
+  name        String
+  model       String?
+  description String?
+  imageUrl    String?
+  imageAlt    String?
+  /// [{ label, value }] — المواصفات الفنية
+  specs       Json?
+  isActive    Boolean @default(true)
+  order       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+//  المحتوى العام
+// ============================================================================
+
+model Testimonial {
+  id          String  @id @default(cuid())
+  authorName  String
+  authorTitle String?
+  companyName String?
+  city        String?
+  rating      Int     @default(5)
+  content     String
+  imageUrl    String?
+
+  /// لا يظهر التقييم في الموقع قبل اعتماده من الإدارة
+  isApproved Boolean @default(false)
+  isFeatured Boolean @default(false)
+  order      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isApproved, order])
+}
+
+model Faq {
+  id       String  @id @default(cuid())
+  question String
+  answer   String
+  /// تصنيف اختياري لتجميع الأسئلة: الطلب، الشحن، الدفع، التصميم …
+  category String?
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+}
+
+/// الصفحات الثابتة القابلة للتحرير من لوحة التحكم (السياسات، من نحن …)
+model Page {
+  id      String @id @default(cuid())
+  slug    String @unique
+  title   String
+  /// محتوى بصيغة Markdown مبسّطة — يُعرض عبر src/lib/markdown.ts
+  content String
+
+  seoTitle       String?
+  seoDescription String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+//  العروض والشحن والإعدادات
+// ============================================================================
+
+model Coupon {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  description String?
+
+  /// PERCENT | FIXED
+  type  String @default("PERCENT")
+  value Float
+
+  minOrderAmount Float?
+  maxUses        Int?
+  usedCount      Int    @default(0)
+
+  startsAt  DateTime?
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ShippingZone {
+  id     String @id @default(cuid())
+  name   String
+  /// مصفوفة أسماء المدن المشمولة بهذه المنطقة
+  cities Json
+
+  cost           Float
+  /// الشحن مجاني فوق هذا المبلغ — null يعني لا يوجد
+  freeOverAmount Float?
+  estimatedDays  String?
+
+  isActive Boolean @default(true)
+  order    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// سجل مفرد — id ثابت "singleton"
+model SiteSettings {
+  id String @id @default("singleton")
+
+  companyName String
+  tagline     String?
+  description String?
+
+  phone        String?
+  whatsapp     String?
+  email        String?
+  landline     String?
+  addressLine  String?
+  city         String?
+  mapUrl       String?
+  workingHours String?
+
+  logoUrl      String?
+  logoWhiteUrl String?
+
+  /// { instagram, twitter, tiktok, snapchat, linkedin, youtube }
+  social Json?
+
+  vatNumber        String?
+  crNumber         String?
+  vatRate          Float   @default(0.15)
+  pricesIncludeVat Boolean @default(true)
+
+  /// { bankTransfer, online, cod, onPickup, bankAccounts: [...] }
+  paymentSettings Json?
+
+  defaultSeoTitle       String?
+  defaultSeoDescription String?
+
+  // --- الثيم: تُحقن كمتغيّرات CSS وقت التصيير ---
+  /// اللون الأساسي (الأسطح الداكنة والنصوص) — HEX
+  themePrimary String?
+  /// اللون المميّز (أزرار الإجراء) — HEX
+  themeAccent  String?
+  /// لون العلامة (اللمسات المميّزة) — HEX
+  themeBrand   String?
+  /// مفتاح الخط من القائمة المعرّفة في src/lib/theme.ts
+  themeFont    String?
+  /// انحناء الأركان: SHARP | SOFT | ROUND
+  themeRadius  String?
+
+  updatedAt DateTime @updatedAt
+}
+
+/// قسم في الصفحة الرئيسية.
+///
+/// يتيح للإدارة إظهار الأقسام وإخفاءها وإعادة ترتيبها وتعديل عناوينها دون
+/// كود. المفاتيح ثابتة ومرتبطة بمكوّنات فعلية — تُضاف من الكود لا من اللوحة.
+model HomeSection {
+  id String @id @default(cuid())
+
+  /// مفتاح ثابت يطابق مكوّنًا: products | portfolio | services | whyUs |
+  /// orderSteps | testimonials | contact
+  key String @unique
+
+  /// تجاوز العنوان والوصف الافتراضيين — اتركهما فارغين لاستخدام الأصلي
+  title       String?
+  description String?
+  eyebrow     String?
+
+  isActive Boolean @default(true)
+  order    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+}
+
+model ContactMessage {
+  id      String  @id @default(cuid())
+  name    String
+  phone   String
+  email   String?
+  subject String?
+  message String
+
+  /// NEW | READ | REPLIED | ARCHIVED
+  status String @default("NEW")
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+model MediaAsset {
+  id           String @id @default(cuid())
+  url          String @unique
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  width        Int?
+  height       Int?
+  alt          String?
+  /// مجلد منطقي للتنظيم: products, projects, services, equipment, uploads
+  folder       String @default("uploads")
+
+  createdAt DateTime @default(now())
+
+  @@index([folder, createdAt])
+}
+
+// ============================================================================
+//  لوحة التحكم
+// ============================================================================
+
+model AdminUser {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  /// OWNER | ADMIN | EDITOR
+  role         String  @default("ADMIN")
+  isActive     Boolean @default(true)
+
+  lastLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

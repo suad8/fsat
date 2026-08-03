@@ -1,0 +1,107 @@
+import type { ReactNode } from "react";
+
+import { cn } from "@/lib/utils";
+
+type SectionProps = {
+  children: ReactNode;
+  id?: string;
+  className?: string;
+  /** خلفية القسم — تُستخدم للتناوب بين الأقسام وإعطاء إيقاع بصري. */
+  tone?: "default" | "muted" | "sunken" | "dark";
+  /** إلغاء التباعد الرأسي الافتراضي. */
+  flush?: boolean;
+};
+
+const TONES = {
+  default: "bg-surface",
+  muted: "bg-surface-muted",
+  sunken: "bg-surface-sunken",
+  dark: "bg-primary-950 text-primary-100",
+} as const;
+
+export function Section({
+  children,
+  id,
+  className,
+  tone = "default",
+  flush = false,
+}: SectionProps) {
+  return (
+    <section id={id} className={cn(TONES[tone], !flush && "section-y", className)}>
+      <div className="container-page">{children}</div>
+    </section>
+  );
+}
+
+type SectionHeadingProps = {
+  /** نص صغير فوق العنوان يعرّف بالقسم. */
+  eyebrow?: string;
+  title: ReactNode;
+  description?: ReactNode;
+  /** محاذاة المحتوى — الوسط للأقسام التعريفية، البداية للقوائم. */
+  align?: "start" | "center";
+  /** عنصر يظهر بمحاذاة العنوان (زر "عرض الكل" مثلاً). */
+  action?: ReactNode;
+  tone?: "light" | "dark";
+  /** مستوى العنوان — h2 افتراضيًا للحفاظ على تسلسل صحيح داخل الصفحة. */
+  as?: "h1" | "h2" | "h3";
+  className?: string;
+};
+
+export function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  align = "center",
+  action,
+  tone = "light",
+  as: Tag = "h2",
+  className,
+}: SectionHeadingProps) {
+  const centered = align === "center";
+
+  return (
+    <div
+      className={cn(
+        "mb-10 md:mb-14",
+        centered ? "text-center" : "flex flex-wrap items-end justify-between gap-4",
+        className,
+      )}
+    >
+      <div className={cn(centered && "mx-auto max-w-2xl")}>
+        {eyebrow ? (
+          <p
+            className={cn(
+              "mb-3 text-xs font-bold tracking-[0.18em]",
+              tone === "dark" ? "text-accent-300" : "text-accent-700",
+            )}
+          >
+            {eyebrow}
+          </p>
+        ) : null}
+
+        <Tag
+          className={cn(
+            "text-2xl md:text-3xl lg:text-[2.1rem]",
+            tone === "dark" && "text-white",
+          )}
+        >
+          {title}
+        </Tag>
+
+        {description ? (
+          <p
+            className={cn(
+              "mt-4 text-base leading-relaxed md:text-[1.05rem]",
+              tone === "dark" ? "text-primary-300" : "text-primary-600",
+            )}
+          >
+            {description}
+          </p>
+        ) : null}
+      </div>
+
+      {action ? <div className={cn(centered && "mt-6")}>{action}</div> : null}
+    </div>
+  );
+}
