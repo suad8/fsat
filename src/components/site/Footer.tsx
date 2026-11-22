@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Logo } from "@/components/site/Logo";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { brand } from "@/config/brand";
 import { footerNav } from "@/config/nav";
 import { getSettings } from "@/lib/settings";
 import { telUrl } from "@/lib/whatsapp";
@@ -26,8 +27,16 @@ export async function Footer() {
   });
 
   return (
-    <footer className="bg-primary-950 text-primary-300 mt-auto">
-      <div className="container-page py-14 md:py-16">
+    <footer className="bg-primary-950 grain text-primary-300 relative mt-auto overflow-hidden">
+      {/* شريط CMYK رفيع — توقيع طباعي */}
+      <div aria-hidden="true" className="flex h-1.5">
+        <span className="flex-1 bg-[#00AEEF]" />
+        <span className="flex-1 bg-[#EC008C]" />
+        <span className="flex-1 bg-[#FFF200]" />
+        <span className="flex-1 bg-black" />
+      </div>
+
+      <div className="container-page relative py-16 md:py-20">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-12 lg:gap-8">
           {/* الهوية والوصف */}
           <div className="lg:col-span-4">
@@ -47,7 +56,7 @@ export async function Footer() {
                       rel="noopener noreferrer"
                       aria-label={label}
                       title={label}
-                      className="border-primary-800 text-primary-400 hover:border-brand-600 hover:bg-brand-600 focus-visible:outline-accent-500 grid size-10 place-items-center rounded-lg border transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+                      className="border-primary-800 text-primary-400 hover:border-accent-500 hover:bg-accent-500 hover:text-accent-contrast focus-visible:outline-accent-500 grid size-10 place-items-center rounded-xl border transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2"
                     >
                       <Icon name={icon} className="size-[1.1rem]" />
                     </a>
@@ -138,6 +147,14 @@ export async function Footer() {
             </span>
           </div>
         </div>
+
+        {/* اسم العلامة بحجم ضخم — زخرفة بخط مفرّغ */}
+        <p
+          aria-hidden="true"
+          className="font-display mt-14 text-center text-[clamp(3.5rem,14vw,11rem)] leading-none font-black tracking-tight text-transparent select-none [-webkit-text-stroke:1.5px_rgb(255_255_255/0.1)]"
+        >
+          {brand.nameShort}
+        </p>
       </div>
     </footer>
   );

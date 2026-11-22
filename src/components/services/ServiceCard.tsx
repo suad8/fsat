@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Icon, resolveIcon } from "@/components/ui/Icon";
+import { Tilt } from "@/components/ui/Tilt";
 import { SmartImage } from "@/components/ui/SmartImage";
 import { cn } from "@/lib/utils";
 
@@ -30,9 +31,10 @@ export function ServiceCard({
   className?: string;
 }) {
   return (
+    <Tilt className="rounded-2xl" max={3}>
     <article
       className={cn(
-        "group border-border bg-surface relative flex flex-col overflow-hidden rounded-xl border",
+        "group border-border bg-surface relative flex h-full flex-col overflow-hidden rounded-2xl border",
         "shadow-card hover:shadow-card-hover hover:border-border-strong transition-[box-shadow,border-color] duration-300",
         "focus-within:outline-accent-600 focus-within:outline-2 focus-within:outline-offset-2",
         className,
@@ -53,7 +55,7 @@ export function ServiceCard({
       <div className="flex flex-1 flex-col p-5 md:p-6">
         <span
           aria-hidden="true"
-          className="bg-accent-50 text-accent-700 ring-accent-600/15 group-hover:bg-brand-600 mb-4 grid size-11 place-items-center rounded-lg ring-1 transition-colors group-hover:text-white"
+          className="bg-accent-50 text-accent-700 ring-accent-600/15 group-hover:bg-brand-600 mb-4 grid size-12 place-items-center rounded-xl ring-1 transition-colors group-hover:text-white"
         >
           <Icon name={resolveIcon(service.iconKey)} className="size-[1.35rem]" />
         </span>
@@ -81,5 +83,6 @@ export function ServiceCard({
         </span>
       </div>
     </article>
+    </Tilt>
   );
 }

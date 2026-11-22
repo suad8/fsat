@@ -1,6 +1,6 @@
 import { ButtonLink } from "@/components/ui/Button";
-import { Icon, type IconName } from "@/components/ui/Icon";
-import { Reveal } from "@/components/ui/Reveal";
+import { StepsTimeline } from "@/components/home/StepsTimeline";
+import type { IconName } from "@/components/ui/Icon";
 import { Section, SectionHeading } from "@/components/ui/Section";
 
 const STEPS: { icon: IconName; title: string; description: string }[] = [
@@ -37,11 +37,10 @@ const STEPS: { icon: IconName; title: string; description: string }[] = [
 ];
 
 /**
- * خطوات الطلب.
+ * خطوات الطلب — خط زمني تفاعلي.
  *
- * الخط الرابط بين الخطوات أفقي على الشاشات الكبيرة ورأسي على الجوال،
- * وهو عنصر زخرفي مخفي عن قارئ الشاشة — الترتيب يفهمه القارئ من ترقيم
- * القائمة نفسه.
+ * العنوان والدعوة للإجراء مثبّتان (sticky) على الشاشات الكبيرة بينما يمرّ
+ * القارئ على الخطوات، والخط يمتلئ مع التمرير (انظر StepsTimeline).
  */
 /** العناوين قابلة للتعديل من /admin/theme — تسقط للافتراضي إن تُركت فارغة. */
 export function OrderSteps({
@@ -51,55 +50,32 @@ export function OrderSteps({
 } = {}) {
   return (
     <Section id="how-to-order">
-      <SectionHeading
-        eyebrow={heading?.eyebrow ?? "خطوات الطلب"}
-        title={heading?.title ?? "من الفكرة إلى الاستلام في ست خطوات"}
-        description={heading?.description ?? "مسار واضح بلا مفاجآت — تعرف في كل مرحلة أين وصل طلبك وما الخطوة التالية."}
-      />
+      <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
+        <div className="lg:sticky lg:top-32 lg:col-span-5 lg:self-start">
+          <SectionHeading
+            align="start"
+            className="mb-8 md:mb-8"
+            eyebrow={heading?.eyebrow ?? "خطوات الطلب"}
+            title={heading?.title ?? "من الفكرة إلى الاستلام في ست خطوات"}
+            description={
+              heading?.description ??
+              "مسار واضح بلا مفاجآت — تعرف في كل مرحلة أين وصل طلبك وما الخطوة التالية."
+            }
+          />
 
-      <ol className="relative grid gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-8 lg:gap-y-10">
-        {STEPS.map((step, index) => (
-          <Reveal
-            as="li"
-            key={step.title}
-            delay={Math.min(index * 70, 350)}
-            className="relative"
-          >
-            <div className="flex items-start gap-4">
-              <span className="relative shrink-0">
-                <span
-                  aria-hidden="true"
-                  className="border-border bg-surface text-primary-950 shadow-card grid size-14 place-items-center rounded-xl border"
-                >
-                  <Icon name={step.icon} className="size-6" strokeWidth={1.5} />
-                </span>
+          <div className="flex flex-wrap gap-3">
+            <ButtonLink href="/shop" size="lg" iconAfter="arrowLeft">
+              ابدأ الطلب الآن
+            </ButtonLink>
+            <ButtonLink href="/faq" size="lg" variant="outline">
+              الأسئلة الشائعة
+            </ButtonLink>
+          </div>
+        </div>
 
-                <span
-                  aria-hidden="true"
-                  className="bg-brand-600 absolute -top-2 -right-2 grid size-7 place-items-center rounded-full text-xs font-bold text-white shadow-sm"
-                >
-                  {index + 1}
-                </span>
-              </span>
-
-              <div className="min-w-0 flex-1 pt-1">
-                <h3 className="text-base font-bold">{step.title}</h3>
-                <p className="text-primary-600 mt-1.5 text-sm leading-relaxed">
-                  {step.description}
-                </p>
-              </div>
-            </div>
-          </Reveal>
-        ))}
-      </ol>
-
-      <div className="mt-12 flex flex-wrap justify-center gap-3">
-        <ButtonLink href="/shop" size="lg" iconAfter="arrowLeft">
-          ابدأ الطلب الآن
-        </ButtonLink>
-        <ButtonLink href="/faq" size="lg" variant="outline">
-          الأسئلة الشائعة
-        </ButtonLink>
+        <div className="lg:col-span-7">
+          <StepsTimeline steps={STEPS} />
+        </div>
       </div>
     </Section>
   );

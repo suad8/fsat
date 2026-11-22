@@ -1,5 +1,4 @@
 import { Rating } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
 
@@ -37,15 +36,16 @@ export function Testimonials({ testimonials }: { testimonials: Testimonial[] }) 
             as="li"
             key={testimonial.id}
             delay={Math.min(index * 80, 320)}
-            className="border-border bg-surface shadow-card flex flex-col rounded-xl border p-6"
+            className="border-border bg-surface shadow-card hover:shadow-card-hover flex flex-col rounded-3xl border p-7 transition-shadow duration-300"
           >
-            <Icon
-              name="sparkles"
-              className="text-accent-300 mb-4 size-7"
-              strokeWidth={1.3}
-            />
+            <span
+              aria-hidden="true"
+              className="foil-text font-display mb-2 block h-12 text-7xl leading-none font-black"
+            >
+              &ldquo;
+            </span>
 
-            <blockquote className="text-primary-700 flex-1 text-sm leading-relaxed">
+            <blockquote className="text-primary-800 flex-1 text-base leading-relaxed">
               {testimonial.content}
             </blockquote>
 

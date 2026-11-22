@@ -33,22 +33,27 @@ export function PageHeader({
     <section
       className={cn(
         "relative overflow-hidden",
-        isDark ? "bg-primary-950 text-white" : "bg-surface-muted border-border border-b",
+        isDark ? "bg-primary-950 grain text-white" : "bg-surface-muted border-border border-b",
       )}
     >
       {isDark ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.05]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, rgb(255 255 255) 1px, transparent 0)",
-            backgroundSize: "26px 26px",
-          }}
-        />
+        <>
+          <div
+            aria-hidden="true"
+            className="halftone halftone-fade text-white/[0.07] pointer-events-none absolute inset-0"
+          />
+          <div
+            aria-hidden="true"
+            className="bg-accent-500/15 pointer-events-none absolute -top-24 -end-24 size-80 rounded-full blur-[110px]"
+          />
+          <div
+            aria-hidden="true"
+            className="bg-brand-600/25 pointer-events-none absolute -bottom-32 start-1/4 size-80 rounded-full blur-[120px]"
+          />
+        </>
       ) : null}
 
-      <div className="container-page relative py-9 md:py-14">
+      <div className="container-page relative py-12 md:py-20">
         <Intro>
         {breadcrumbs && breadcrumbs.length > 0 ? (
           <Breadcrumbs
@@ -63,7 +68,7 @@ export function PageHeader({
             {eyebrow ? (
               <p
                 className={cn(
-                  "mb-3 text-xs font-bold tracking-[0.18em]",
+                  "mb-4 text-xs font-bold tracking-[0.2em]",
                   isDark ? "text-accent-300" : "text-accent-700",
                 )}
               >
@@ -73,7 +78,7 @@ export function PageHeader({
 
             <h1
               className={cn(
-                "text-2xl md:text-3xl lg:text-[2.35rem]",
+                "text-3xl md:text-4xl lg:text-5xl",
                 isDark && "text-white",
               )}
             >

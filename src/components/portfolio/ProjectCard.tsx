@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
+import { Tilt } from "@/components/ui/Tilt";
 import { SmartImage } from "@/components/ui/SmartImage";
 import { cn } from "@/lib/utils";
 
@@ -34,9 +35,10 @@ export function ProjectCard({
   const cover = project.images[0];
 
   return (
+    <Tilt className="rounded-2xl" max={3}>
     <article
       className={cn(
-        "group bg-primary-950 relative overflow-hidden rounded-xl",
+        "group bg-primary-950 relative overflow-hidden rounded-2xl",
         "focus-within:outline-accent-600 focus-within:outline-2 focus-within:outline-offset-2",
         className,
       )}
@@ -103,5 +105,6 @@ export function ProjectCard({
         </div>
       </div>
     </article>
+    </Tilt>
   );
 }

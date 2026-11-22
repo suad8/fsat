@@ -19,8 +19,16 @@ export function ContactCta({
   settings: Settings;
 }) {
   return (
-    <section id="contact" className="bg-primary-950 text-white">
-      <div className="container-page section-y">
+    <section id="contact" className="bg-primary-950 grain relative overflow-hidden text-white">
+      <div
+        aria-hidden="true"
+        className="halftone halftone-fade text-white/[0.07] pointer-events-none absolute inset-0"
+      />
+      <div
+        aria-hidden="true"
+        className="bg-accent-500/15 pointer-events-none absolute -top-40 -start-32 size-[30rem] rounded-full blur-[130px]"
+      />
+      <div className="container-page section-y relative">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
           {/* الدعوة وطرق التواصل */}
           <div>
@@ -28,7 +36,7 @@ export function ContactCta({
               ابدأ مشروعك
             </p>
 
-            <h2 className="text-2xl text-white md:text-3xl lg:text-[2.1rem]">
+            <h2 className="text-3xl text-white md:text-4xl lg:text-[2.6rem]">
               أرسل مواصفات طلبك واستلم عرض السعر خلال يوم عمل
             </h2>
 
@@ -89,7 +97,7 @@ export function ContactCta({
           </div>
 
           {/* النموذج المختصر */}
-          <div className="bg-surface text-primary-900 shadow-pop rounded-2xl p-6 md:p-8">
+          <div className="bg-surface text-primary-900 shadow-pop crop-marks rounded-3xl [--crop-color:var(--color-accent-500)] p-6 md:p-8">
             <h3 className="text-xl font-bold">طلب عرض سعر سريع</h3>
             <p className="text-primary-600 mt-2 mb-6 text-sm">
               تحتاج نموذجًا أوسع بخيارات رفع التصاميم؟{" "}

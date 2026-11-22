@@ -4,6 +4,7 @@ import { QuickAddButton } from "@/components/shop/QuickAddButton";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { Icon, resolveIcon } from "@/components/ui/Icon";
+import { Tilt } from "@/components/ui/Tilt";
 import { Price, QuoteOnlyLabel } from "@/components/ui/Price";
 import { SmartImage } from "@/components/ui/SmartImage";
 import type { ProductCard as ProductCardData } from "@/lib/queries";
@@ -34,9 +35,10 @@ export function ProductCard({
   const isQuoteOnly = product.priceMode === "QUOTE_ONLY";
 
   return (
+    <Tilt className="rounded-2xl" max={3}>
     <article
       className={cn(
-        "group border-border bg-surface flex h-full flex-col overflow-hidden rounded-xl border",
+        "group border-border bg-surface flex h-full flex-col overflow-hidden rounded-2xl border",
         "shadow-card hover:shadow-card-hover hover:border-border-strong transition-[box-shadow,border-color] duration-300",
         className,
       )}
@@ -158,5 +160,6 @@ export function ProductCard({
         </div>
       </div>
     </article>
+    </Tilt>
   );
 }

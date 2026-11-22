@@ -16,29 +16,29 @@ export type ButtonVariant =
 export type ButtonSize = "sm" | "md" | "lg";
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 font-bold rounded-lg " +
-  "transition-[background-color,color,box-shadow,transform] duration-200 " +
+  "inline-flex items-center justify-center gap-2 font-bold rounded-xl " +
+  "transition-[background-color,color,box-shadow,transform,border-color] duration-300 " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 " +
   "disabled:opacity-50 disabled:pointer-events-none active:scale-[0.985] " +
   "whitespace-nowrap";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary-950 text-white hover:bg-primary-900 shadow-sm focus-visible:outline-primary-950",
+    "bg-primary-950 text-white hover:bg-primary-900 shadow-sm shine hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-primary-950",
   /*
    * لون النص محسوب لا ثابت: `accent-contrast` يُولَّد من سطوع اللون المميّز
    * عند حفظ الثيم. هكذا يبقى الزر مقروءًا سواء اختارت الإدارة ذهبيًا فاتحًا
    * (فيصير النص داكنًا) أو أزرق غامقًا (فيصير أبيض).
    */
   accent:
-    "bg-accent-500 text-accent-contrast hover:bg-accent-400 shadow-sm focus-visible:outline-accent-600",
+    "bg-accent-500 text-accent-contrast hover:bg-accent-400 shadow-sm shine hover:-translate-y-0.5 hover:shadow-glow focus-visible:outline-accent-600",
   brand:
-    "bg-brand-600 text-brand-contrast hover:bg-brand-700 shadow-sm focus-visible:outline-brand-700",
+    "bg-brand-600 text-brand-contrast hover:bg-brand-700 shadow-sm shine hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-brand-700",
   outline:
     "border border-border-strong bg-surface text-primary-900 hover:bg-surface-muted hover:border-primary-400 focus-visible:outline-primary-700",
   ghost: "text-primary-700 hover:bg-surface-sunken hover:text-primary-950",
   // لون واتساب الرسمي — ثابت عمدًا ولا يتبع تدرّج الهوية حتى يبقى معروفًا فورًا
-  whatsapp: "bg-[#25D366] text-white hover:bg-[#1EBE5A] shadow-sm focus-visible:outline-[#1EBE5A]",
+  whatsapp: "bg-[#25D366] text-white hover:bg-[#1EBE5A] shadow-sm shine hover:-translate-y-0.5 focus-visible:outline-[#1EBE5A]",
   danger: "bg-danger-600 text-white hover:bg-danger-700 focus-visible:outline-danger-700",
 };
 

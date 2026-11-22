@@ -9,7 +9,8 @@ import { gsap, MOTION_OK } from "@/lib/gsap";
  * حركة القسم الرئيسي:
  *  - مدخل متتابع للنص ثم العرض البصري (timeline واحد)
  *  - عدّاد تصاعدي للأرقام (data-count)
- *  - بارالاكس للتوهّجين الخلفيين مرتبط بالتمرير (data-parallax = شدّة الحركة)
+ *  - بارالاكس للتوهّجين وصور العرض مرتبط بالتمرير (data-parallax = شدّة الحركة)
+ *  - دوران بطيء لعلامة التسجيل (data-spin)
  */
 export function HeroMotion({ children }: { children: ReactNode }) {
   const scope = useRef<HTMLDivElement>(null);
@@ -31,6 +32,9 @@ export function HeroMotion({ children }: { children: ReactNode }) {
           { autoAlpha: 1, y: 0, scale: 1, duration: 1, stagger: 0.12 },
           0.25,
         );
+
+        // علامة التسجيل تدور ببطء دائم
+        gsap.to("[data-spin]", { rotation: 360, duration: 60, ease: "none", repeat: -1 });
 
         gsap.utils.toArray<HTMLElement>("[data-count]").forEach((el) => {
           const target = Number(el.dataset.count);

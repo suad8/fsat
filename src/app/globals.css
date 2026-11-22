@@ -105,18 +105,19 @@
   --font-sans: var(--font-body), system-ui, sans-serif;
   --font-display: var(--font-heading), var(--font-body), system-ui, sans-serif;
 
-  /* --- الانحناءات --- */
-  --radius-xs: 0.25rem;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.25rem;
-  --radius-2xl: 1.75rem;
+  /* --- الانحناءات: أكبر وأنعم من النسخة السابقة --- */
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
 
-  /* --- الظلال: مصبوغة بالبنفسجي الداكن بدل الأسود الحيادي --- */
-  --shadow-card: 0 1px 2px rgb(38 23 71 / 0.05), 0 4px 16px rgb(38 23 71 / 0.06);
-  --shadow-card-hover: 0 2px 4px rgb(38 23 71 / 0.06), 0 12px 32px rgb(38 23 71 / 0.12);
-  --shadow-pop: 0 8px 40px rgb(38 23 71 / 0.2);
+  /* --- الظلال: طبقات مصبوغة بالبنفسجي الداكن بدل الأسود الحيادي --- */
+  --shadow-card: 0 1px 1px rgb(38 23 71 / 0.04), 0 8px 24px -8px rgb(38 23 71 / 0.1);
+  --shadow-card-hover: 0 2px 4px rgb(38 23 71 / 0.05), 0 24px 48px -16px rgb(38 23 71 / 0.28);
+  --shadow-pop: 0 24px 80px -12px rgb(38 23 71 / 0.4);
+  --shadow-glow: 0 0 0 1px rgb(251 192 45 / 0.35), 0 12px 40px -8px rgb(251 192 45 / 0.45);
 
   /* --- منحنيات الحركة --- */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
@@ -153,8 +154,9 @@
   h5,
   h6 {
     font-family: var(--font-display);
-    font-weight: 700;
-    line-height: 1.25;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.012em;
     text-wrap: balance;
     color: var(--color-primary-950);
   }
@@ -221,6 +223,133 @@
   -ms-overflow-style: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ==========================================================================
+   لغة التصميم — مستوحاة من عالم الطباعة
+   --------------------------------------------------------------------------
+   halftone    شبكة نقطية كطباعة الأوفست (تلوّن بـ currentColor)
+   crop-marks  علامات القص في زاويتين متقابلتين، كما تظهر على ملفات الطباعة
+   foil-text   نص بتدرّج ذهبي لامع كأنه تغليف فويل
+   grain       حبيبات ورق خفيفة فوق الأسطح الداكنة
+   spotlight   بقعة ضوء تتبع المؤشر (تُحرَّك من مكوّن Tilt)
+   ========================================================================== */
+
+@utility halftone {
+  background-image: radial-gradient(circle at center, currentColor 1.3px, transparent 1.8px);
+  background-size: 15px 15px;
+}
+
+@utility halftone-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 10%, transparent 90%);
+  mask-image: linear-gradient(to bottom, #000 10%, transparent 90%);
+}
+
+@utility crop-marks {
+  position: relative;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+    border-color: var(--crop-color, currentColor);
+    opacity: 0.55;
+  }
+  &::before {
+    top: -6px;
+    inset-inline-start: -6px;
+    border-top: 1.5px solid;
+    border-inline-start: 1.5px solid;
+  }
+  &::after {
+    bottom: -6px;
+    inset-inline-end: -6px;
+    border-bottom: 1.5px solid;
+    border-inline-end: 1.5px solid;
+  }
+}
+
+@utility foil-text {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-accent-300) 0%,
+    var(--color-accent-500) 30%,
+    var(--color-accent-200) 50%,
+    var(--color-accent-500) 70%,
+    var(--color-accent-600) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: foil-shift 7s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes foil-shift {
+  to {
+    background-position: 100% 0;
+  }
+}
+
+@utility grain {
+  position: relative;
+  isolation: isolate;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.09;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+}
+
+@utility spotlight {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s var(--ease-out-soft);
+    background: radial-gradient(
+      360px circle at var(--mx, 50%) var(--my, 50%),
+      color-mix(in srgb, var(--color-accent-500) 20%, transparent),
+      transparent 65%
+    );
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
+/* بريق يمرّ فوق الأزرار عند التمرير */
+@utility shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    transform: translateX(120%) skewX(-18deg);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+    transition: transform 0.7s var(--ease-out-soft);
+  }
+  &:hover::after {
+    transform: translateX(-120%) skewX(-18deg);
   }
 }
 

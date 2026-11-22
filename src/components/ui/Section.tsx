@@ -68,21 +68,25 @@ export function SectionHeading({
         className,
       )}
     >
-      <div className={cn(centered && "mx-auto max-w-2xl")}>
+      <div className={cn(centered && "mx-auto max-w-3xl")}>
         {eyebrow ? (
           <p
             className={cn(
-              "mb-3 text-xs font-bold tracking-[0.18em]",
+              "mb-4 inline-flex items-center gap-3 text-xs font-bold tracking-[0.2em]",
               tone === "dark" ? "text-accent-300" : "text-accent-700",
             )}
           >
+            <span aria-hidden="true" className="h-px w-8 bg-current opacity-60" />
             {eyebrow}
+            {centered ? (
+              <span aria-hidden="true" className="h-px w-8 bg-current opacity-60" />
+            ) : null}
           </p>
         ) : null}
 
         <Tag
           className={cn(
-            "text-2xl md:text-3xl lg:text-[2.1rem]",
+            "text-[1.75rem] md:text-4xl lg:text-[2.6rem]",
             tone === "dark" && "text-white",
           )}
         >
@@ -92,7 +96,7 @@ export function SectionHeading({
         {description ? (
           <p
             className={cn(
-              "mt-4 text-base leading-relaxed md:text-[1.05rem]",
+              "mt-5 text-base leading-relaxed md:text-lg",
               tone === "dark" ? "text-primary-300" : "text-primary-600",
             )}
           >

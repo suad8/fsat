@@ -1,6 +1,8 @@
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
+import { Tilt } from "@/components/ui/Tilt";
+import { cn } from "@/lib/utils";
 
 const REASONS: { icon: IconName; title: string; description: string }[] = [
   {
@@ -61,28 +63,88 @@ export function WhyUs({
         description={heading?.description ?? "نملك خط الإنتاج بالكامل، فنتحكّم في الجودة والمدة والتكلفة — وهذا ما يظهر في النتيجة النهائية بين يديك."}
       />
 
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
-        {REASONS.map((reason, index) => (
-          <Reveal
-            as="li"
-            key={reason.title}
-            delay={Math.min(index * 60, 300)}
-            className="border-border bg-surface hover:border-border-strong hover:shadow-card group rounded-xl border p-6 transition-[border-color,box-shadow] duration-300"
-          >
-            <span
-              aria-hidden="true"
-              className="bg-primary-950 group-hover:bg-brand-600 mb-4 grid size-11 place-items-center rounded-lg text-white transition-colors"
+      {/* شبكة غير متساوية (bento): الميزة الأولى بطاقة كبيرة داكنة */}
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6 lg:gap-5">
+        {REASONS.map((reason, index) => {
+          const hero = index === 0;
+          const span = hero
+            ? "lg:col-span-3 lg:row-span-2"
+            : index < 3
+              ? "lg:col-span-3"
+              : "lg:col-span-2";
+
+          return (
+            <Reveal
+              as="li"
+              key={reason.title}
+              delay={Math.min(index * 60, 300)}
+              className={span}
             >
-              <Icon name={reason.icon} className="size-[1.35rem]" />
-            </span>
+              <Tilt
+                className={cn(
+                  "rounded-3xl",
+                  hero ? "bg-primary-950 grain text-white" : "border-border bg-surface border",
+                )}
+              >
+                <div
+                  className={cn(
+                    "group relative flex h-full flex-col overflow-hidden rounded-3xl p-6 md:p-8",
+                    hero && "justify-between",
+                  )}
+                >
+                  {hero ? (
+                    <div
+                      aria-hidden="true"
+                      className="halftone halftone-fade text-white/[0.09] pointer-events-none absolute inset-0"
+                    />
+                  ) : null}
 
-            <h3 className="text-base font-bold md:text-lg">{reason.title}</h3>
+                  <div className="relative flex items-start justify-between">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "grid place-items-center rounded-2xl transition-colors duration-300",
+                        hero
+                          ? "bg-accent-500 text-accent-contrast size-16"
+                          : "bg-primary-950 group-hover:bg-brand-600 size-12 text-white",
+                      )}
+                    >
+                      <Icon name={reason.icon} className={hero ? "size-8" : "size-6"} />
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "font-display text-sm font-bold tracking-widest",
+                        hero ? "text-white/30" : "text-primary-300",
+                      )}
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                  </div>
 
-            <p className="text-primary-600 mt-2.5 text-sm leading-relaxed">
-              {reason.description}
-            </p>
-          </Reveal>
-        ))}
+                  <div className="relative mt-6">
+                    <h3
+                      className={cn(
+                        "font-bold",
+                        hero ? "text-2xl text-white md:text-3xl" : "text-base md:text-lg",
+                      )}
+                    >
+                      {reason.title}
+                    </h3>
+                    <p
+                      className={cn(
+                        "mt-3 leading-relaxed",
+                        hero ? "text-primary-300 text-base" : "text-primary-600 text-sm",
+                      )}
+                    >
+                      {reason.description}
+                    </p>
+                  </div>
+                </div>
+              </Tilt>
+            </Reveal>
+          );
+        })}
       </ul>
     </Section>
   );

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
 
 import { useCart } from "@/components/cart/CartProvider";
 import { ButtonLink, IconButton } from "@/components/ui/Button";
@@ -10,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Logo } from "@/components/site/Logo";
 import { contact } from "@/config/brand";
 import { mainNav } from "@/config/nav";
+import { gsap, MOTION_OK, ScrollTrigger } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 import { telUrl, whatsappGeneralUrl } from "@/lib/whatsapp";
 
@@ -42,6 +44,42 @@ export function Header({ categories }: HeaderProps) {
     [pathname],
   );
 
+  const headerRef = useRef<HTMLElement>(null);
+  const menuOpenRef = useRef(false);
+  useEffect(() => {
+    menuOpenRef.current = menuOpen;
+  }, [menuOpen]);
+
+  /*
+   * يختفي الهيدر عند التمرير للأسفل ويعود عند التمرير للأعلى (GSAP).
+   * يُحرَّك `top` لا `transform`: أي transform على الهيدر يجعله حاضنًا
+   * لعناصره ذات position: fixed فتنكسر قائمة الجوال. لا يختفي أثناء فتح القائمة.
+   */
+  useGSAP(
+    () => {
+      const el = headerRef.current;
+      if (!el) return;
+      const mm = gsap.matchMedia();
+      mm.add(MOTION_OK, () => {
+        ScrollTrigger.create({
+          start: 140,
+          end: "max",
+          onUpdate: (self) => {
+            if (menuOpenRef.current) return;
+            gsap.to(el, {
+              top: self.direction === 1 ? -el.offsetHeight : 0,
+              duration: 0.4,
+              ease: "power3.out",
+              overwrite: true,
+            });
+          },
+        });
+      });
+      return () => mm.revert();
+    },
+    { scope: headerRef },
+  );
+
   // ظل خفيف يظهر بعد التمرير ليفصل الترويسة عن المحتوى
   useEffect(() => {
     function onScroll() {
@@ -69,9 +107,10 @@ export function Header({ categories }: HeaderProps) {
 
   return (
     <header
+      ref={headerRef}
       className={cn(
         "sticky top-0 z-50 transition-shadow duration-300",
-        scrolled ? "shadow-[0_1px_20px_rgb(18_17_16/0.08)]" : "",
+        scrolled ? "shadow-[0_8px_32px_-12px_rgb(38_23_71/0.25)]" : "",
       )}
     >
       {/* شريط علوي — معلومات تواصل سريعة، يختفي على الجوال لتوفير المساحة */}
@@ -102,7 +141,7 @@ export function Header({ categories }: HeaderProps) {
       </div>
 
       {/* الشريط الرئيسي */}
-      <div className="border-border bg-surface/95 border-b backdrop-blur-sm">
+      <div className="border-border bg-surface/80 border-b backdrop-blur-xl backdrop-saturate-150">
         <div className="container-page flex h-16 items-center justify-between gap-4 md:h-20">
           <Logo priority />
 
@@ -166,9 +205,9 @@ function DesktopNav({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-bold transition-colors",
+                  "inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-bold transition-colors",
                   active
-                    ? "text-accent-700 bg-accent-50"
+                    ? "text-primary-950 bg-accent-100"
                     : "text-primary-700 hover:text-primary-950 hover:bg-surface-sunken",
                 )}
               >
@@ -191,7 +230,7 @@ function DesktopNav({
                     "group-focus-within:pointer-events-auto group-focus-within:opacity-100",
                   )}
                 >
-                  <ul className="border-border bg-surface shadow-pop w-64 rounded-xl border p-2">
+                  <ul className="border-border bg-surface shadow-pop w-64 rounded-2xl border p-2">
                     {categories.map((category) => (
                       <li key={category.slug}>
                         <Link
