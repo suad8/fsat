@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { HeroMotion } from "@/components/home/HeroMotion";
 import { ButtonLink } from "@/components/ui/Button";
 import { Icon, resolveIcon } from "@/components/ui/Icon";
 import { SmartImage } from "@/components/ui/SmartImage";
@@ -34,6 +35,7 @@ export function Hero({
 
   return (
     <section className="bg-primary-950 relative overflow-hidden text-white">
+      <HeroMotion>
       {/* نقشة خفيفة مرسومة بـ CSS — بلا ملفات صور */}
       <div
         aria-hidden="true"
@@ -47,10 +49,12 @@ export function Hero({
       {/* توهّجان بلوني الهوية: ذهبي من الأعلى وبنفسجي من الأسفل */}
       <div
         aria-hidden="true"
+        data-parallax="35"
         className="bg-accent-500/15 pointer-events-none absolute -top-32 -start-32 size-[26rem] rounded-full blur-[110px]"
       />
       <div
         aria-hidden="true"
+        data-parallax="-25"
         className="bg-brand-600/25 pointer-events-none absolute -bottom-40 -end-24 size-[30rem] rounded-full blur-[130px]"
       />
 
@@ -58,22 +62,22 @@ export function Hero({
         <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-16">
           {/* النص */}
           <div className="lg:col-span-6 xl:col-span-5">
-            <p className="text-accent-300 animate-fade-up mb-5 inline-flex items-center gap-2 text-xs font-bold tracking-[0.15em]">
+            <p data-hero-text className="text-accent-300 mb-5 inline-flex items-center gap-2 text-xs font-bold tracking-[0.15em]">
               <span className="bg-accent-400 size-1.5 rounded-full" aria-hidden="true" />
               {brand.taglineSecondary}
             </p>
 
-            <h1 className="animate-fade-up text-3xl leading-[1.2] text-white md:text-4xl lg:text-[2.9rem]">
+            <h1 data-hero-text className=" text-3xl leading-[1.2] text-white md:text-4xl lg:text-[2.9rem]">
               {settings.tagline}
             </h1>
 
-            <p className="text-primary-300 animate-fade-up mt-6 max-w-xl text-base leading-relaxed md:text-lg">
+            <p data-hero-text className="text-primary-300 mt-6 max-w-xl text-base leading-relaxed md:text-lg">
               من التصميم إلى التسليم — نطبع البوكسات والأكواب والمطبوعات
               والاستيكرات، ونصنّع اللوحات والأكريليك والهدايا الدعائية، بمكائن
               حديثة وخامات مختارة وفريق يتابع طلبك حتى يصل إليك.
             </p>
 
-            <div className="animate-fade-up mt-9 flex flex-wrap gap-3">
+            <div data-hero-text className="mt-9 flex flex-wrap gap-3">
               <ButtonLink href="/shop" size="lg" variant="accent" iconAfter="arrowLeft">
                 تصفّح المنتجات
               </ButtonLink>
@@ -99,11 +103,11 @@ export function Hero({
             </div>
 
             {/* مؤشرات سريعة */}
-            <dl className="border-primary-800 mt-10 grid max-w-lg grid-cols-3 gap-4 border-t pt-7">
-              <Stat value={`+${stats.services}`} label="خدمة طباعة" />
-              <Stat value={`+${stats.products}`} label="منتج جاهز للطلب" />
+            <dl data-hero-text className="border-primary-800 mt-10 grid max-w-lg grid-cols-3 gap-4 border-t pt-7">
+              <Stat value={stats.services} label="خدمة طباعة" />
+              <Stat value={stats.products} label="منتج جاهز للطلب" />
               <Stat
-                value={`+${new Date().getFullYear() - brand.foundedYear}`}
+                value={new Date().getFullYear() - brand.foundedYear}
                 label="سنوات خبرة"
               />
             </dl>
@@ -116,6 +120,7 @@ export function Hero({
                 {showcase.map((project, index) => (
                   <div
                     key={project.id}
+                    data-hero-visual
                     className={
                       index === 0
                         ? "col-span-2 md:col-span-1 md:row-span-2"
@@ -141,6 +146,7 @@ export function Hero({
           </div>
         </div>
       </div>
+      </HeroMotion>
     </section>
   );
 }
@@ -149,12 +155,16 @@ export function Hero({
  * flex-col-reverse يبقي ترتيب الـ DOM صحيحًا (dt قبل dd) بينما يعرض الرقم
  * فوق التسمية بصريًا — فلا تتكرر التسمية على قارئ الشاشة.
  */
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col-reverse">
       <dt className="text-primary-400 mt-1 text-xs md:text-sm">{label}</dt>
-      <dd className="font-display text-2xl font-extrabold text-white md:text-3xl">
-        {value}
+      <dd
+        data-count={value}
+        data-prefix="+"
+        className="font-display text-2xl font-extrabold text-white md:text-3xl"
+      >
+        +{value}
       </dd>
     </div>
   );
@@ -173,7 +183,7 @@ function CategoryShowcase({
   categories: { slug: string; name: string; iconKey: string | null; count: number }[];
 }) {
   return (
-    <div className="border-primary-800 bg-primary-900/40 rounded-2xl border p-4 md:p-6">
+    <div data-hero-visual className="border-primary-800 bg-primary-900/40 rounded-2xl border p-4 md:p-6">
       <p className="text-accent-300 mb-4 text-center text-xs font-bold">
         تصفّح حسب القسم
       </p>

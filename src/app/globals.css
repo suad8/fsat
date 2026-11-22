@@ -225,7 +225,7 @@
 }
 
 /* ==========================================================================
-   الحركات — خفيفة ومبنية على CSS فقط، بلا مكتبات
+   الحركات — CSS للتفاعلات الصغيرة، وGSAP للمداخل والتمرير
    ========================================================================== */
 
 @keyframes fade-up {
@@ -272,23 +272,17 @@
 }
 
 /*
-  ظهور العناصر عند التمرير.
-  يعتمد على IntersectionObserver الذي يضيف .is-visible (انظر components/site/Reveal).
-  الحالة الابتدائية تُطبَّق فقط عند السماح بالحركة، حتى لا يختفي المحتوى
-  نهائيًا لمن يعطّل الحركات أو عند تعطّل الـ JavaScript.
+  الحالة الابتدائية لعناصر حركات GSAP (Reveal وIntro وHero).
+  تُطبَّق فقط عند السماح بالحركة وتفعيل JavaScript، حتى لا يختفي المحتوى
+  نهائيًا لمن يعطّل الحركات أو الـ JavaScript. GSAP يتولّى إظهارها.
 */
-@media (prefers-reduced-motion: no-preference) {
-  .reveal {
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  .reveal:not(.is-visible),
+  [data-intro],
+  [data-hero-text],
+  [data-hero-visual] {
     opacity: 0;
-    transform: translateY(16px);
-    transition:
-      opacity 0.6s var(--ease-out-soft),
-      transform 0.6s var(--ease-out-soft);
-  }
-
-  .reveal.is-visible {
-    opacity: 1;
-    transform: none;
+    visibility: hidden;
   }
 }
 

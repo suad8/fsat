@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Intro } from "@/components/ui/Intro";
 import { Breadcrumbs, type Crumb } from "@/components/ui/Breadcrumbs";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export function PageHeader({
       ) : null}
 
       <div className="container-page relative py-9 md:py-14">
+        <Intro>
         {breadcrumbs && breadcrumbs.length > 0 ? (
           <Breadcrumbs
             items={breadcrumbs}
@@ -56,7 +58,7 @@ export function PageHeader({
           />
         ) : null}
 
-        <div className="flex flex-wrap items-end justify-between gap-6">
+        <div data-intro className="flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-3xl">
             {eyebrow ? (
               <p
@@ -94,6 +96,7 @@ export function PageHeader({
         </div>
 
         {children}
+        </Intro>
       </div>
     </section>
   );

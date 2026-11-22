@@ -1,22 +1,18 @@
 "use client";
 
-import { useEffect, useRef, type ElementType, type ReactNode } from "react";
+import { useRef, type ElementType, type ReactNode } from "react";
+import { useGSAP } from "@gsap/react";
 
+import { gsap, MOTION_OK } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 
 /**
- * ظهور تدريجي عند الوصول للعنصر أثناء التمرير.
+ * ظهور العنصر عند الوصول إليه أثناء التمرير، بـ GSAP + ScrollTrigger.
  *
- * يعتمد على IntersectionObserver بدل مستمع scroll، فلا يُنفَّذ أي كود
- * أثناء التمرير نفسه ولا يؤثر على الأداء. المراقبة تتوقف بعد أول ظهور.
- *
- * الصنف يُضاف مباشرة على عنصر الـ DOM عبر ref بدل حالة React: هذا تحديث
- * لنظام خارجي (الـ DOM) وهو الاستخدام المقصود للـ effect، ويتجنّب دورة
- * إعادة رسم كاملة لكل عنصر يظهر في الشاشة.
- *
- * الحالة الابتدائية (الشفافية صفر) معرّفة في globals.css داخل
- * prefers-reduced-motion: no-preference، فمن يعطّل الحركات يرى المحتوى
- * مباشرة، ومن يعطّل الـ JavaScript كذلك.
+ * الحالة الابتدائية المخفية معرّفة في globals.css داخل
+ * prefers-reduced-motion: no-preference وscripting: enabled، فمن يعطّل
+ * الحركات أو الـ JavaScript يرى المحتوى مباشرة. عند انتهاء الحركة تُنظَّف
+ * الأنماط المضمّنة فيعود العنصر لتنسيق CSS العادي دون أثر على التفاعلات.
  */
 export function Reveal({
   children,
@@ -32,36 +28,37 @@ export function Reveal({
 }) {
   const ref = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
+  useGSAP(
+    () => {
+      const node = ref.current;
+      if (!node) return;
 
-    // المتصفحات القديمة أو بيئات الاختبار: أظهر المحتوى فورًا
-    if (typeof IntersectionObserver === "undefined") {
-      node.classList.add("is-visible");
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-visible");
-        observer.disconnect();
-      },
-      // rootMargin سالب من الأسفل حتى يبدأ الظهور بعد دخول جزء معقول من العنصر
-      { threshold: 0.08, rootMargin: "0px 0px -60px 0px" },
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+      const mm = gsap.matchMedia();
+      mm.add(MOTION_OK, () => {
+        gsap.fromTo(
+          node,
+          { autoAlpha: 0, y: 36 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.9,
+            delay: delay / 1000,
+            ease: "power3.out",
+            scrollTrigger: { trigger: node, start: "top 90%", once: true },
+            onComplete: () => {
+              node.classList.add("is-visible");
+              gsap.set(node, { clearProps: "opacity,visibility,transform" });
+            },
+          },
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope: ref, dependencies: [delay] },
+  );
 
   return (
-    <Tag
-      ref={ref}
-      className={cn("reveal", className)}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
-    >
+    <Tag ref={ref} className={cn("reveal", className)}>
       {children}
     </Tag>
   );
