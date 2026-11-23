@@ -68,6 +68,19 @@ export function slugify(input: string): string {
     .slice(0, 96);
 }
 
+/**
+ * فكّ ترميز slug قادم من الرابط. الراوتر يمرّر الروابط العربية مرمّزة
+ * (%D9%87…) بينما تُحفظ في القاعدة كما هي، فبدون الفكّ تعطي كل صفحة
+ * بـ slug عربي 404.
+ */
+export function decodeSlug(slug: string): string {
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
+  }
+}
+
 /** بناء رابط مطلق — مطلوب لخريطة الموقع والبيانات المنظّمة ورسائل واتساب. */
 export function absoluteUrl(path: string): string {
   return `${siteUrl}${path.startsWith("/") ? path : `/${path}`}`;

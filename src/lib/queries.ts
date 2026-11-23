@@ -1,3 +1,4 @@
+import { decodeSlug } from "@/lib/utils";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
@@ -37,6 +38,7 @@ export const getCategories = cache(async () => {
 });
 
 export const getCategoryBySlug = cache(async (slug: string) => {
+  slug = decodeSlug(slug);
   return prisma.category.findFirst({
     where: { slug, isActive: true },
   });
@@ -238,6 +240,7 @@ export const getProducts = cache(
 );
 
 export const getProductBySlug = cache(async (slug: string) => {
+  slug = decodeSlug(slug);
   return prisma.product.findFirst({
     where: { slug, isActive: true },
     include: {
@@ -293,6 +296,7 @@ export const getServices = cache(async (onlyFeatured = false) => {
 });
 
 export const getServiceBySlug = cache(async (slug: string) => {
+  slug = decodeSlug(slug);
   return prisma.service.findFirst({
     where: { slug, isActive: true },
     include: {
@@ -355,6 +359,7 @@ export const getProjects = cache(
 );
 
 export const getProjectBySlug = cache(async (slug: string) => {
+  slug = decodeSlug(slug);
   return prisma.project.findFirst({
     where: { slug, isActive: true },
     include: {
@@ -394,6 +399,7 @@ export const getEquipment = cache(async () => {
 });
 
 export const getPageBySlug = cache(async (slug: string) => {
+  slug = decodeSlug(slug);
   return prisma.page.findFirst({ where: { slug, isActive: true } });
 });
 
