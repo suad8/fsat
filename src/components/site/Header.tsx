@@ -114,7 +114,7 @@ export function Header({ categories }: HeaderProps) {
       )}
     >
       {/* شريط علوي — معلومات تواصل سريعة، يختفي على الجوال لتوفير المساحة */}
-      <div className="bg-primary-950 text-primary-300 hidden py-2 text-xs lg:block">
+      <div className="bg-ink text-primary-300 hidden border-b border-white/10 py-2 text-xs lg:block">
         <div className="container-page flex items-center justify-between gap-6">
           <div className="flex items-center gap-6">
             <a
@@ -141,9 +141,9 @@ export function Header({ categories }: HeaderProps) {
       </div>
 
       {/* الشريط الرئيسي */}
-      <div className="border-border bg-surface/80 border-b backdrop-blur-xl backdrop-saturate-150">
+      <div className="bg-ink border-b border-white/10 text-white">
         <div className="container-page flex h-16 items-center justify-between gap-4 md:h-20">
-          <Logo priority />
+          <Logo priority variant="light" />
 
           <DesktopNav categories={categories} isActive={isActive} />
 
@@ -164,7 +164,7 @@ export function Header({ categories }: HeaderProps) {
               label={menuOpen ? "إغلاق القائمة" : "فتح القائمة"}
               variant="outline"
               size="sm"
-              className="lg:hidden"
+              className="border-white/20 bg-transparent text-white hover:border-white/50 hover:bg-white/10 hover:text-white lg:hidden"
               aria-expanded={menuOpen}
               aria-controls="mobile-menu"
               onClick={() => setMenuOpen((open) => !open)}
@@ -207,8 +207,8 @@ function DesktopNav({
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-bold transition-colors",
                   active
-                    ? "text-primary-950 bg-accent-100"
-                    : "text-primary-700 hover:text-primary-950 hover:bg-surface-sunken",
+                    ? "bg-accent-500 text-accent-contrast"
+                    : "text-primary-200 hover:bg-white/10 hover:text-white",
                 )}
               >
                 {item.label}
@@ -230,21 +230,21 @@ function DesktopNav({
                     "group-focus-within:pointer-events-auto group-focus-within:opacity-100",
                   )}
                 >
-                  <ul className="border-border bg-surface shadow-pop w-64 rounded-2xl border p-2">
+                  <ul className="bg-ink shadow-pop w-64 rounded-2xl border border-white/10 p-2">
                     {categories.map((category) => (
                       <li key={category.slug}>
                         <Link
                           href={`/shop/${category.slug}`}
-                          className="text-primary-700 hover:bg-surface-sunken hover:text-primary-950 block rounded-md px-3 py-2 text-sm font-medium transition-colors"
+                          className="text-primary-200 block rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-white/10 hover:text-white"
                         >
                           {category.name}
                         </Link>
                       </li>
                     ))}
-                    <li className="border-border mt-1 border-t pt-1">
+                    <li className="mt-1 border-t border-white/10 pt-1">
                       <Link
                         href="/shop"
-                        className="text-accent-700 hover:bg-accent-50 block rounded-md px-3 py-2 text-sm font-bold transition-colors"
+                        className="text-accent-300 block rounded-lg px-3 py-2 text-sm font-bold transition-colors hover:bg-white/10"
                       >
                         عرض كل المنتجات
                       </Link>
@@ -271,7 +271,7 @@ function CartButton() {
       aria-label={
         hydrated && itemCount > 0 ? `السلة، ${itemCount} منتج` : "السلة"
       }
-      className="border-border-strong text-primary-700 hover:border-primary-400 hover:bg-surface-muted focus-visible:outline-accent-600 relative grid size-9 place-items-center rounded-lg border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 md:size-11"
+      className="text-primary-100 focus-visible:outline-accent-500 relative grid size-9 border-white/20 hover:border-white/50 hover:bg-white/10 place-items-center rounded-xl border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 md:size-11"
     >
       <Icon name="cart" className="size-5" />
 
@@ -315,8 +315,8 @@ function MobileMenu({
         // inert يمنع الوصول للروابط بلوحة المفاتيح والقارئ عندما تكون القائمة مغلقة
         inert={!open}
         className={cn(
-          "bg-surface fixed inset-x-0 top-16 z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-b lg:hidden",
-          "border-border transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          "bg-ink fixed inset-x-0 top-16 z-40 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-b text-white lg:hidden",
+          "border-white/10 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
           open ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0",
         )}
       >
@@ -330,27 +330,27 @@ function MobileMenu({
                   className={cn(
                     "flex items-center justify-between rounded-lg px-4 py-3 text-[0.95rem] font-bold transition-colors",
                     isActive(item.href)
-                      ? "bg-accent-50 text-accent-700"
-                      : "text-primary-800 hover:bg-surface-sunken",
+                      ? "bg-accent-500 text-accent-contrast"
+                      : "text-primary-100 hover:bg-white/10",
                   )}
                 >
                   <span className="flex flex-col">
                     {item.label}
                     {item.description ? (
-                      <span className="text-primary-500 mt-0.5 text-xs font-normal">
+                      <span className="text-primary-400 mt-0.5 text-xs font-normal">
                         {item.description}
                       </span>
                     ) : null}
                   </span>
-                  <Icon name="chevronLeft" className="text-primary-300 size-4" />
+                  <Icon name="chevronLeft" className="text-primary-400 size-4" />
                 </Link>
               </li>
             ))}
           </ul>
 
           {categories.length > 0 ? (
-            <div className="border-border mt-5 border-t pt-5">
-              <p className="text-primary-500 mb-3 px-4 text-xs font-bold tracking-wider">
+            <div className="mt-5 border-t border-white/10 pt-5">
+              <p className="text-primary-400 mb-3 px-4 text-xs font-bold tracking-wider">
                 أقسام المتجر
               </p>
               <ul className="grid grid-cols-2 gap-1.5">
@@ -358,7 +358,7 @@ function MobileMenu({
                   <li key={category.slug}>
                     <Link
                       href={`/shop/${category.slug}`}
-                      className="text-primary-700 hover:bg-surface-sunken block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+                      className="text-primary-200 block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/10"
                     >
                       {category.name}
                     </Link>
@@ -368,7 +368,7 @@ function MobileMenu({
             </div>
           ) : null}
 
-          <div className="border-border mt-5 grid gap-2.5 border-t pt-5">
+          <div className="mt-5 grid gap-2.5 border-t border-white/10 pt-5">
             <ButtonLink href="/quote" variant="accent" fullWidth>
               طلب عرض سعر
             </ButtonLink>
@@ -383,7 +383,7 @@ function MobileMenu({
             </ButtonLink>
             <a
               href={telUrl}
-              className="text-primary-600 hover:text-primary-900 inline-flex items-center justify-center gap-2 py-2 text-sm font-bold transition-colors"
+              className="text-primary-300 inline-flex items-center justify-center gap-2 py-2 text-sm font-bold transition-colors hover:text-white"
             >
               <Icon name="phone" className="size-4" />
               <span dir="ltr">{contact.phoneDisplay}</span>

@@ -33,7 +33,7 @@ export function PageHeader({
     <section
       className={cn(
         "relative overflow-hidden",
-        isDark ? "bg-primary-950 grain text-white" : "bg-surface-muted border-border border-b",
+        isDark ? "bg-ink grain text-white" : "bg-surface-muted border-border border-b",
       )}
     >
       {isDark ? (
@@ -44,8 +44,16 @@ export function PageHeader({
           />
           <div
             aria-hidden="true"
-            className="bg-accent-500/15 pointer-events-none absolute -top-24 -end-24 size-80 rounded-full blur-[110px]"
+            className="bg-accent-500/20 pointer-events-none absolute -top-24 -end-24 size-96 rounded-full blur-[120px]"
           />
+          {eyebrow ? (
+            <p
+              aria-hidden="true"
+              className="font-display text-outline pointer-events-none absolute -bottom-[0.28em] start-0 text-[clamp(6rem,22vw,20rem)] leading-none font-black whitespace-nowrap text-white/[0.14] select-none"
+            >
+              {eyebrow}
+            </p>
+          ) : null}
           <div
             aria-hidden="true"
             className="bg-brand-600/25 pointer-events-none absolute -bottom-32 start-1/4 size-80 rounded-full blur-[120px]"
@@ -64,7 +72,7 @@ export function PageHeader({
         ) : null}
 
         <div data-intro className="flex flex-wrap items-end justify-between gap-6">
-          <div className="max-w-3xl">
+          <div className="max-w-4xl">
             {eyebrow ? (
               <p
                 className={cn(
@@ -78,7 +86,7 @@ export function PageHeader({
 
             <h1
               className={cn(
-                "text-3xl md:text-4xl lg:text-5xl",
+                "text-[clamp(2.4rem,7vw,5.5rem)] leading-[1.05] font-black tracking-[-0.02em]",
                 isDark && "text-white",
               )}
             >
@@ -88,7 +96,7 @@ export function PageHeader({
             {description ? (
               <div
                 className={cn(
-                  "mt-4 text-base leading-relaxed",
+                  "mt-6 max-w-2xl text-base leading-relaxed md:text-lg",
                   isDark ? "text-primary-300" : "text-primary-600",
                 )}
               >

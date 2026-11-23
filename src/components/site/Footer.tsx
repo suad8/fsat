@@ -27,7 +27,7 @@ export async function Footer() {
   });
 
   return (
-    <footer className="bg-primary-950 grain text-primary-300 relative mt-auto overflow-hidden">
+    <footer className="bg-ink grain text-primary-300 relative mt-auto overflow-hidden">
       {/* شريط CMYK رفيع — توقيع طباعي */}
       <div aria-hidden="true" className="flex h-1.5">
         <span className="flex-1 bg-[#00AEEF]" />

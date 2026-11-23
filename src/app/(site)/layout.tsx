@@ -1,6 +1,7 @@
 import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/site/Footer";
 import { Header } from "@/components/site/Header";
+import { CustomCursor } from "@/components/site/CustomCursor";
 import { ScrollProgress } from "@/components/site/ScrollProgress";
 import { WhatsAppFab } from "@/components/site/WhatsAppFab";
 import { getCategories } from "@/lib/queries";
@@ -21,6 +22,7 @@ export default async function SiteLayout({
   return (
     <CartProvider>
       <ScrollProgress />
+      <CustomCursor />
       <Header
         categories={categories.map((category) => ({
           slug: category.slug,

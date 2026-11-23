@@ -19,7 +19,7 @@ export function ContactCta({
   settings: Settings;
 }) {
   return (
-    <section id="contact" className="bg-primary-950 grain relative overflow-hidden text-white">
+    <section id="contact" className="bg-ink grain relative overflow-hidden text-white">
       <div
         aria-hidden="true"
         className="halftone halftone-fade text-white/[0.07] pointer-events-none absolute inset-0"

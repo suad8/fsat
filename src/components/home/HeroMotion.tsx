@@ -7,10 +7,9 @@ import { gsap, MOTION_OK } from "@/lib/gsap";
 
 /**
  * حركة القسم الرئيسي:
- *  - مدخل متتابع للنص ثم العرض البصري (timeline واحد)
- *  - عدّاد تصاعدي للأرقام (data-count)
- *  - بارالاكس للتوهّجين وصور العرض مرتبط بالتمرير (data-parallax = شدّة الحركة)
- *  - دوران بطيء لعلامة التسجيل (data-spin)
+ *  - كلمات العنوان تصعد من خلف قناع بتتابع (data-w)، ثم بقية العناصر
+ *  - أقراص الحبر الملوّنة تطفو ببطء وتتبع المؤشر (data-disc)
+ *  - بارالاكس مرتبط بالتمرير (data-parallax)، ودوران بطيء (data-spin)
  */
 export function HeroMotion({ children }: { children: ReactNode }) {
   const scope = useRef<HTMLDivElement>(null);
@@ -20,35 +19,39 @@ export function HeroMotion({ children }: { children: ReactNode }) {
       const mm = gsap.matchMedia();
 
       mm.add(MOTION_OK, () => {
-        const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        gsap
+          .timeline({ defaults: { ease: "power4.out" } })
+          .fromTo(
+            "[data-w]",
+            { autoAlpha: 0, yPercent: 120, rotate: 5 },
+            { autoAlpha: 1, yPercent: 0, rotate: 0, duration: 1.1, stagger: 0.09 },
+          )
+          .fromTo(
+            "[data-hero-text]",
+            { autoAlpha: 0, y: 28 },
+            { autoAlpha: 1, y: 0, duration: 0.8, stagger: 0.1 },
+            0.45,
+          )
+          .fromTo(
+            "[data-hero-visual]",
+            { autoAlpha: 0, y: 60, scale: 0.92 },
+            { autoAlpha: 1, y: 0, scale: 1, duration: 1.1, stagger: 0.12 },
+            0.6,
+          );
 
-        tl.fromTo(
-          "[data-hero-text]",
-          { autoAlpha: 0, y: 30 },
-          { autoAlpha: 1, y: 0, duration: 0.85, stagger: 0.11 },
-        ).fromTo(
-          "[data-hero-visual]",
-          { autoAlpha: 0, y: 50, scale: 0.94 },
-          { autoAlpha: 1, y: 0, scale: 1, duration: 1, stagger: 0.12 },
-          0.25,
-        );
+        gsap.to("[data-spin]", { rotation: 360, duration: 24, ease: "none", repeat: -1 });
 
-        // علامة التسجيل تدور ببطء دائم
-        gsap.to("[data-spin]", { rotation: 360, duration: 60, ease: "none", repeat: -1 });
-
-        gsap.utils.toArray<HTMLElement>("[data-count]").forEach((el) => {
-          const target = Number(el.dataset.count);
-          if (!Number.isFinite(target)) return;
-          const prefix = el.dataset.prefix ?? "";
-          const state = { value: 0 };
-          gsap.to(state, {
-            value: target,
-            duration: 1.8,
-            delay: 0.5,
-            ease: "power2.out",
-            onUpdate: () => {
-              el.textContent = `${prefix}${Math.round(state.value)}`;
-            },
+        // الأقراص تطفو بشكل عشوائي بطيء
+        gsap.utils.toArray<HTMLElement>("[data-disc]").forEach((disc, index) => {
+          gsap.to(disc, {
+            x: () => gsap.utils.random(-80, 80),
+            y: () => gsap.utils.random(-60, 60),
+            scale: () => gsap.utils.random(0.9, 1.25),
+            duration: gsap.utils.random(7, 11),
+            ease: "sine.inOut",
+            repeat: -1,
+            yoyo: true,
+            delay: index * 0.6,
           });
         });
 
@@ -57,13 +60,30 @@ export function HeroMotion({ children }: { children: ReactNode }) {
             yPercent: Number(el.dataset.parallax) || 20,
             ease: "none",
             scrollTrigger: {
-              trigger: scope.current,
+              trigger: scope.current?.parentElement,
               start: "top top",
               end: "bottom top",
               scrub: true,
             },
           });
         });
+
+        // ...وتنجذب قليلًا نحو المؤشر (للفأرة فقط)
+        if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+          const host = scope.current;
+          const layer = host?.querySelector<HTMLElement>("[data-disc-layer]");
+          if (host && layer) {
+            const qx = gsap.quickTo(layer, "x", { duration: 1.4, ease: "power3" });
+            const qy = gsap.quickTo(layer, "y", { duration: 1.4, ease: "power3" });
+            const move = (e: PointerEvent) => {
+              qx((e.clientX / window.innerWidth - 0.5) * 70);
+              qy((e.clientY / window.innerHeight - 0.5) * 50);
+            };
+            window.addEventListener("pointermove", move);
+            return () => window.removeEventListener("pointermove", move);
+          }
+        }
+
       });
 
       return () => mm.revert();

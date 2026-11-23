@@ -17,11 +17,14 @@ export function Marquee({
   items,
   className,
   speed = 60,
+  large = false,
 }: {
   items: string[];
   className?: string;
   /** سرعة الحركة بالبكسل في الثانية. */
   speed?: number;
+  /** نسخة ضخمة للشرائط الزخرفية: فاصل أكبر وتباعد أوسع. */
+  large?: boolean;
 }) {
   const scope = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -60,10 +63,13 @@ export function Marquee({
       <span
         key={`${hidden ? "b" : "a"}-${index}`}
         aria-hidden={hidden || undefined}
-        className="inline-flex items-center gap-8 pe-8"
+        className={cn("inline-flex items-center", large ? "gap-10 pe-10" : "gap-8 pe-8")}
       >
         <span>{item}</span>
-        <span aria-hidden="true" className="bg-accent-500 size-1.5 rotate-45" />
+        <span
+          aria-hidden="true"
+          className={cn("rotate-45", large ? "size-3 bg-current" : "bg-accent-500 size-1.5")}
+        />
       </span>
     ));
 

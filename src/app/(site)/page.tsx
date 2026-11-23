@@ -1,10 +1,14 @@
+import { CategoriesRail } from "@/components/home/CategoriesRail";
+import { StatsBand } from "@/components/home/StatsBand";
+import { TickerBand } from "@/components/home/TickerBand";
+import { brand } from "@/config/brand";
 import { ContactCta } from "@/components/home/ContactCta";
 import { Hero } from "@/components/home/Hero";
 import { OrderSteps } from "@/components/home/OrderSteps";
 import { Testimonials } from "@/components/home/Testimonials";
 import { WhyUs } from "@/components/home/WhyUs";
 import { ProjectCard } from "@/components/portfolio/ProjectCard";
-import { ServiceCard } from "@/components/services/ServiceCard";
+import { ServicesList } from "@/components/home/ServicesList";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -140,13 +144,7 @@ export default async function HomePage() {
           description="تُضاف الخدمات وتُحرَّر من لوحة التحكم."
         />
       ) : (
-        <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {services.map((service, index) => (
-            <Reveal as="li" key={service.id} delay={Math.min(index * 50, 300)}>
-              <ServiceCard service={service} showImage={false} />
-            </Reveal>
-          ))}
-        </ul>
+        <ServicesList services={services} />
       )}
     </Section>,
   );
@@ -217,20 +215,28 @@ export default async function HomePage() {
         }}
       />
 
-      <Hero
-        projects={projects}
+      <Hero projects={projects} settings={settings} />
+
+      <div id="after-hero" />
+
+      <TickerBand items={categories.map((category) => category.name)} />
+
+      <CategoriesRail
         categories={categories.map((category) => ({
           slug: category.slug,
           name: category.name,
           iconKey: category.iconKey,
           count: category._count.products,
         }))}
-        settings={settings}
-        stats={{
-          services: services.length,
-          products: allProducts.length,
-          projects: projects.length,
-        }}
+      />
+
+      <StatsBand
+        stats={[
+          { value: services.length, label: "خدمة طباعة وتجهيز" },
+          { value: allProducts.length, label: "منتج جاهز للطلب" },
+          { value: new Date().getFullYear() - brand.foundedYear, label: "سنة من الخبرة" },
+          { value: 24, label: "ساعة لوصول عرض السعر", plus: false },
+        ]}
       />
 
       {sections.map((section) => section.node)}

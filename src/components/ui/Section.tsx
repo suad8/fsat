@@ -86,7 +86,7 @@ export function SectionHeading({
 
         <Tag
           className={cn(
-            "text-[1.75rem] md:text-4xl lg:text-[2.6rem]",
+            "text-[clamp(2rem,5vw,3.9rem)] leading-[1.08] font-black tracking-[-0.015em]",
             tone === "dark" && "text-white",
           )}
         >
