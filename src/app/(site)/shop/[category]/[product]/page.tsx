@@ -10,14 +10,16 @@ import {
 import { ProductGallery } from "@/components/shop/ProductGallery";
 import { Badge } from "@/components/ui/Badge";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { Price } from "@/components/ui/Price";
+import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
 import { brand, commerce } from "@/config/brand";
 import type { PriceMode } from "@/lib/constants";
 import { calculateStartingPrice } from "@/lib/pricing";
 import { getProductBySlug, getProducts, getRelatedProducts } from "@/lib/queries";
 import { breadcrumbJsonLd, JsonLd, productJsonLd } from "@/lib/seo";
-import { truncate } from "@/lib/utils";
+import { formatNumber, truncate } from "@/lib/utils";
 
 type Params = Promise<{ category: string; product: string }>;
 
@@ -80,47 +82,8 @@ export default async function ProductPage({ params }: { params: Params }) {
     optionGroups: groups,
   });
 
-  return (
+  const about = (
     <>
-      <JsonLd
-        data={[
-          breadcrumbJsonLd(crumbs),
-          productJsonLd({
-            name: product.name,
-            description: product.shortDescription ?? product.description,
-            slug: product.slug,
-            categorySlug: product.category.slug,
-            imageUrl: product.images[0]?.url ?? null,
-            price: startingPrice,
-            currency: commerce.currency,
-            sku: product.sku,
-            brandName: brand.name,
-            inStock: product.priceMode !== "QUOTE_ONLY",
-          }),
-        ]}
-      />
-
-      <div className="border-border bg-surface-muted border-b">
-        <div className="container-page py-4">
-          <Breadcrumbs items={crumbs} />
-        </div>
-      </div>
-
-      {/* pb كبير على الجوال ليفسح مكانًا للشريط السفلي الثابت */}
-      <div className="container-page py-8 pb-28 md:py-12 md:pb-12">
-        <div className="grid gap-10 lg:grid-cols-2 lg:gap-14">
-          {/* --- الصور والوصف --- */}
-          <div>
-            <ProductGallery
-              images={product.images.map((image) => ({
-                id: image.id,
-                url: image.url,
-                alt: image.alt,
-              }))}
-              productName={product.name}
-              categoryIcon={product.category.iconKey}
-            />
-
             {product.description ? (
               <div className="mt-10">
                 <h2 className="mb-3 text-lg font-bold">عن هذا المنتج</h2>
@@ -150,6 +113,52 @@ export default async function ProductPage({ params }: { params: Params }) {
                 </ul>
               </div>
             ) : null}
+    </>
+  );
+
+  return (
+    <>
+      <JsonLd
+        data={[
+          breadcrumbJsonLd(crumbs),
+          productJsonLd({
+            name: product.name,
+            description: product.shortDescription ?? product.description,
+            slug: product.slug,
+            categorySlug: product.category.slug,
+            imageUrl: product.images[0]?.url ?? null,
+            price: startingPrice,
+            currency: commerce.currency,
+            sku: product.sku,
+            brandName: brand.name,
+            inStock: product.priceMode !== "QUOTE_ONLY",
+          }),
+        ]}
+      />
+
+      <div className="border-border bg-surface-muted border-b">
+        <div className="container-page py-3">
+          <Breadcrumbs items={crumbs} />
+        </div>
+      </div>
+
+      {/* pb كبير على الجوال ليفسح مكانًا للشريط السفلي الثابت */}
+      <div className="container-page py-8 pb-28 md:py-12 md:pb-12">
+        <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-14">
+          {/* --- الصور والوصف: تبقى الصورة ظاهرة أثناء مرور العميل على الخيارات --- */}
+          <div className="lg:sticky lg:top-24">
+            <ProductGallery
+              images={product.images.map((image) => ({
+                id: image.id,
+                url: image.url,
+                alt: image.alt,
+              }))}
+              productName={product.name}
+              categoryIcon={product.category.iconKey}
+            />
+
+            {/* الوصف تحت الصورة على الشاشات الكبيرة، وبعد الخيارات على الجوال */}
+            <div className="hidden lg:block">{about}</div>
           </div>
 
           {/* --- المُهيّئ --- */}
@@ -162,7 +171,7 @@ export default async function ProductPage({ params }: { params: Params }) {
                 {product.category.name}
               </Link>
 
-              <h1 className="text-2xl md:text-3xl">{product.name}</h1>
+              <h1 className="text-3xl leading-tight font-black md:text-4xl">{product.name}</h1>
 
               {product.shortDescription ? (
                 <p className="text-primary-600 mt-3 leading-relaxed">
@@ -170,12 +179,36 @@ export default async function ProductPage({ params }: { params: Params }) {
                 </p>
               ) : null}
 
+              {/* الحقائق الثلاث التي يسأل عنها كل عميل قبل أي شيء */}
+              <Reveal>
+                <dl className="border-border bg-surface shadow-card mt-6 grid grid-cols-3 divide-x divide-x-reverse divide-[var(--color-border)] overflow-hidden rounded-2xl border">
+                  <Fact label="السعر">
+                    {product.priceMode === "QUOTE_ONLY" || startingPrice === null ? (
+                      <span className="text-accent-800 text-sm font-extrabold md:text-base">
+                        بعرض سعر
+                      </span>
+                    ) : (
+                      <Price
+                        value={startingPrice}
+                        size="md"
+                        startsFrom={product.priceMode === "STARTS_FROM"}
+                      />
+                    )}
+                  </Fact>
+                  <Fact label="الحد الأدنى">
+                    <span className="text-sm font-extrabold md:text-base">
+                      {formatNumber(product.minQuantity)} {product.unit}
+                    </span>
+                  </Fact>
+                  <Fact label="مدة التنفيذ">
+                    <span className="text-sm font-extrabold md:text-base">
+                      {product.leadTime ?? "حسب الطلب"}
+                    </span>
+                  </Fact>
+                </dl>
+              </Reveal>
+
               <ul className="mt-5 flex flex-wrap gap-2">
-                {product.leadTime ? (
-                  <li>
-                    <Badge icon="clock">مدة التنفيذ: {product.leadTime}</Badge>
-                  </li>
-                ) : null}
                 {product.sku ? (
                   <li>
                     <Badge icon="tag">رمز المنتج: {product.sku}</Badge>
@@ -209,6 +242,27 @@ export default async function ProductPage({ params }: { params: Params }) {
                 quantityTiers: product.quantityTiers,
               }}
             />
+            <div className="lg:hidden">{about}</div>
+
+            <ul className="mt-8 grid gap-3 sm:grid-cols-3">
+              {TRUST.map((item) => (
+                <li
+                  key={item.title}
+                  className="bg-surface-muted flex items-start gap-3 rounded-2xl p-4"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="bg-ink text-accent-400 grid size-9 shrink-0 place-items-center rounded-xl"
+                  >
+                    <Icon name={item.icon} className="size-[1.1rem]" strokeWidth={1.7} />
+                  </span>
+                  <span className="text-xs leading-relaxed">
+                    <b className="text-primary-950 block text-sm">{item.title}</b>
+                    <span className="text-primary-600">{item.text}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>
@@ -226,5 +280,20 @@ export default async function ProductPage({ params }: { params: Params }) {
         </Section>
       ) : null}
     </>
+  );
+}
+
+const TRUST: { icon: IconName; title: string; text: string }[] = [
+  { icon: "check", title: "مراجعة فنية مجانية", text: "نفحص ملف التصميم قبل الطباعة" },
+  { icon: "shield", title: "فاتورة ضريبية", text: "نظامية مع كل طلب" },
+  { icon: "headset", title: "متابعة حتى التسليم", text: "تصلك التحديثات على واتساب" },
+];
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col-reverse justify-center gap-1 px-3 py-4 text-center md:px-4">
+      <dt className="text-primary-500 text-xs font-medium">{label}</dt>
+      <dd className="text-primary-950 flex justify-center">{children}</dd>
+    </div>
   );
 }
