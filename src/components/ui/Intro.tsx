@@ -28,7 +28,8 @@ export function Intro({ children }: { children: ReactNode }) {
               y: 0,
               duration: 0.8,
               stagger: 0.1,
-              clearProps: "opacity,visibility,transform",
+              // لا clearProps هنا: مسح الأنماط المضمّنة يُعيد قاعدة CSS الابتدائية
+              // (opacity: 0) فيختفي العنوان بعد انتهاء الحركة
             },
           );
       });
