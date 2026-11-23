@@ -134,7 +134,10 @@ function selectedValues(
   if (picked === undefined || picked === null) return [];
 
   const ids = Array.isArray(picked) ? picked : [picked];
-  return group.values.filter((v) => v.isActive && ids.includes(v.id));
+  const matched = group.values.filter((v) => v.isActive && ids.includes(v.id));
+  // اختيار واحد فقط لغير CHECKBOX: السلة تصل من المتصفّح، ومصفوفة معرّفات في
+  // مجموعة RADIO/SELECT كانت تُطبّق كل قيمها معًا فتتراكم الخصومات بالتلاعب
+  return group.type === "CHECKBOX" ? matched : matched.slice(0, 1);
 }
 
 /** قيمة مكتوبة في حقل حرّ (نص/رقم/تاريخ)؟ */

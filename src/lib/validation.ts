@@ -28,6 +28,12 @@ export const saudiPhone = z
   .string()
   .trim()
   .min(1, "رقم الجوال مطلوب")
+  // لوحة المفاتيح العربية تكتب أرقامًا شرقية (٠٥…) أو فارسية (۰۵…): نحوّلها للاتينية
+  .transform((value) =>
+    value
+      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)),
+  )
   .transform((value) => value.replace(/[\s\-()]/g, ""))
   .refine(
     (value) => /^(?:\+?966|00966|0)?5\d{8}$/.test(value),

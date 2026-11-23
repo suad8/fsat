@@ -15,6 +15,13 @@ export function cn(...inputs: ClassValue[]) {
  */
 const AR_LATN = "ar-SA-u-nu-latn";
 
+/**
+ * المنطقة الزمنية للعرض. بدونها يُنسّق التاريخ بمنطقة الخادم (UTC على Railway)
+ * فيظهر طلب الساعة ١ ليلاً في الرياض بتاريخ اليوم السابق، ويختلف النص بين
+ * الخادم والمتصفّح (خطأ hydration في المكوّنات العميلة).
+ */
+const TIME_ZONE = "Asia/Riyadh";
+
 /** تنسيق رقم السعر بدون رمز العملة (الرمز يُعرض كعنصر منفصل للتحكم بحجمه). */
 export function formatPrice(value: number): string {
   const hasFraction = Math.round(value * 100) % 100 !== 0;
@@ -38,6 +45,7 @@ export function formatNumber(value: number): string {
 export function formatDate(value: Date | string): string {
   const date = typeof value === "string" ? new Date(value) : value;
   return new Intl.DateTimeFormat(AR_LATN, {
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -48,6 +56,7 @@ export function formatDate(value: Date | string): string {
 export function formatDateTime(value: Date | string): string {
   const date = typeof value === "string" ? new Date(value) : value;
   return new Intl.DateTimeFormat(AR_LATN, {
+    timeZone: TIME_ZONE,
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -65,7 +74,9 @@ export function slugify(input: string): string {
     .replace(/[ً-ٰٟ]/g, "") // إزالة التشكيل
     .replace(/[^\p{L}\p{N}]+/gu, "-") // أي فاصل غير حرف/رقم يصبح شرطة
     .replace(/^-+|-+$/g, "")
-    .slice(0, 96);
+    .slice(0, 96)
+    // القصّ عند ٩٦ قد يقطع عند فاصل فيترك شرطة في النهاية
+    .replace(/-+$/, "");
 }
 
 /**
