@@ -20,6 +20,10 @@ type Testimonial = {
  * تستبدله الإدارة برأي حقيقي وتعتمده.
  */
 export function Testimonials({ testimonials }: { testimonials: Testimonial[] }) {
+  // رأي ما زال نصًا مؤقتًا ([[يحتاج استبدال]]) لا يُعرض للعميل أبدًا
+  testimonials = testimonials.filter(
+    (item) => !JSON.stringify(item).includes("[[") && item.content.trim().length > 0,
+  );
   if (testimonials.length === 0) return null;
 
   return (

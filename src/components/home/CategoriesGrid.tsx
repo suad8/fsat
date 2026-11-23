@@ -26,6 +26,10 @@ export function CategoriesGrid({ categories }: { categories: Category[] }) {
   const visible = categories.filter((category) => category.count > 0);
   if (visible.length === 0) return null;
 
+  // 5 أعمدة افتراضيًا، و4 إن كانت تترك صفًا أخيرًا أقل امتلاءً (8 أقسام = صفّان كاملان)
+  const leftover = (cols: number) => (cols - (visible.length % cols)) % cols;
+  const cols = leftover(4) < leftover(5) ? 4 : 5;
+
   return (
     <Section id="categories" tone="muted">
       <SectionHeading
@@ -40,7 +44,12 @@ export function CategoriesGrid({ categories }: { categories: Category[] }) {
         }
       />
 
-      <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 lg:gap-4">
+      <ul
+        className={cn(
+          "grid grid-cols-2 gap-3 md:grid-cols-3 lg:gap-4",
+          cols === 4 ? "lg:grid-cols-4" : "lg:grid-cols-5",
+        )}
+      >
         {visible.map((category, index) => (
           <Reveal as="li" key={category.slug} delay={(index % 5) * 70}>
             <Link

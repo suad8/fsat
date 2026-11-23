@@ -64,14 +64,14 @@ export function WhyUs({
       />
 
       {/* شبكة غير متساوية (bento): الميزة الأولى بطاقة كبيرة داكنة */}
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6 lg:gap-5">
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-12 lg:gap-5">
         {REASONS.map((reason, index) => {
           const hero = index === 0;
           const span = hero
-            ? "lg:col-span-3 lg:row-span-2"
+            ? "lg:col-span-6 lg:row-span-2"
             : index < 3
-              ? "lg:col-span-3"
-              : "lg:col-span-2";
+              ? "lg:col-span-6"
+              : "lg:col-span-3";
 
           return (
             <Reveal
