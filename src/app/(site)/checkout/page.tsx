@@ -26,6 +26,7 @@ export default async function CheckoutPage() {
   return (
     <>
       <PageHeader
+        compact
         tone="light"
         eyebrow="الخطوة الأخيرة"
         title="إتمام الطلب"

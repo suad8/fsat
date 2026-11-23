@@ -1,4 +1,5 @@
-import { CategoriesRail } from "@/components/home/CategoriesRail";
+import { CategoriesGrid } from "@/components/home/CategoriesGrid";
+import { OrderPaths } from "@/components/home/OrderPaths";
 import { StatsBand } from "@/components/home/StatsBand";
 import { TickerBand } from "@/components/home/TickerBand";
 import { brand } from "@/config/brand";
@@ -149,7 +150,8 @@ export default async function HomePage() {
     </Section>,
   );
 
-  push(
+  // معرض أعمال فارغ يبدو كموقع غير مكتمل: لا يُعرض حتى تُضاف مشاريع
+  if (projects.length > 0) push(
     "portfolio",
     <Section key="portfolio" id="portfolio" tone="default">
       <SectionHeading
@@ -221,7 +223,9 @@ export default async function HomePage() {
 
       <TickerBand items={categories.map((category) => category.name)} />
 
-      <CategoriesRail
+      <OrderPaths />
+
+      <CategoriesGrid
         categories={categories.map((category) => ({
           slug: category.slug,
           name: category.name,

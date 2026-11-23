@@ -73,6 +73,7 @@ export default async function ContactPage() {
       />
 
       <PageHeader
+        compact
         eyebrow="تواصل معنا"
         title="نحن هنا للرد على استفسارك"
         description="اختر الطريقة الأنسب لك — واتساب للرد السريع، أو النموذج إن كان استفسارك يحتاج تفصيلاً."

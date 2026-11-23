@@ -39,6 +39,9 @@ export function HeroMotion({ children }: { children: ReactNode }) {
             0.6,
           );
 
+        // التميمة تطفو بلطف
+        gsap.to("[data-float]", { y: -16, rotate: 1.5, duration: 3, ease: "sine.inOut", repeat: -1, yoyo: true });
+
         gsap.to("[data-spin]", { rotation: 360, duration: 24, ease: "none", repeat: -1 });
 
         // الأقراص تطفو بشكل عشوائي بطيء

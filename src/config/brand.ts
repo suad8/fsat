@@ -63,14 +63,17 @@ export const palette = {
  * ما لم يوجد الملف، يعرض الموقع شعارًا نصيًا مبنيًا من اسم الشركة.
  */
 export const logo = {
-  primary: "/brand/logo.svg",
-  onDark: "/brand/logo-white.svg",
-  mark: "/brand/mark.svg",
-  /** اضبطها على true بعد وضع ملفات الشعار الحقيقية في public/brand/ */
-  available: false,
+  primary: "/brand/logo.png",
+  onDark: "/brand/logo-gold.png",
+  mark: "/brand/mark.png",
+  markOnDark: "/brand/mark-gold.png",
+  /** تميمة الهوية (الشخصية الذهبية) بخلفية شفافة. */
+  mascot: "/brand/mascot.png",
+  /** الشعار الرسمي مفعّل. */
+  available: true,
   alt: `شعار ${brand.name}`,
-  width: 180,
-  height: 48,
+  width: 900,
+  height: 326,
 } as const;
 
 /**

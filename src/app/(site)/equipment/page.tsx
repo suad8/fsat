@@ -29,6 +29,7 @@ export default async function EquipmentPage() {
       />
 
       <PageHeader
+        compact
         eyebrow="الإمكانيات"
         title="معدات وتقنيات الطباعة"
         description="تنوّع المكائن يعني أن كل طلب يُنفَّذ بالتقنية الأنسب له لا بالمتاح فقط — وهذا ما يفرق بين نتيجة مقبولة ونتيجة تليق بعلامتك التجارية."

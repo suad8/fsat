@@ -15,6 +15,7 @@ export default function CartPage() {
   return (
     <>
       <PageHeader
+        compact
         tone="light"
         eyebrow="السلة"
         title="مراجعة الطلب"

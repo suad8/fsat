@@ -1,11 +1,11 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { HeroMotion } from "@/components/home/HeroMotion";
 import { ButtonLink } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { Magnetic } from "@/components/ui/Magnetic";
 import { SmartImage } from "@/components/ui/SmartImage";
-import { brand } from "@/config/brand";
+import { brand, logo } from "@/config/brand";
 import type { getProjects } from "@/lib/queries";
 import type { Settings } from "@/lib/settings";
 import { whatsappGeneralUrl } from "@/lib/whatsapp";
@@ -58,7 +58,26 @@ export function Hero({
           className="halftone text-white/[0.09] pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_70%_30%,#000,transparent_70%)]"
         />
 
-        <div className="container-page relative flex flex-1 flex-col justify-center pt-10 pb-10 md:pt-14 md:pb-12">
+        {/* تميمة الهوية: تطفو يسار الشاشة الكبيرة تحت سطور العنوان */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-8 end-[3%] z-0 hidden w-[min(17vw,16.5rem)] lg:block"
+        >
+          <div data-hero-visual className="relative">
+            <span className="bg-accent-500/30 absolute inset-x-6 bottom-0 h-10 rounded-[50%] blur-2xl" />
+            <Image
+              src={logo.mascot}
+              alt=""
+              width={522}
+              height={900}
+              priority
+              data-float
+              className="relative h-auto w-full drop-shadow-[0_30px_40px_rgba(0,0,0,0.5)]"
+            />
+          </div>
+        </div>
+
+        <div className="container-page relative z-10 flex flex-1 flex-col justify-center pt-10 pb-10 md:pt-14 md:pb-12">
           <p
             data-hero-text
             className="mb-6 inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-white/5 py-2 ps-3 pe-5 text-xs font-bold backdrop-blur"
@@ -157,43 +176,10 @@ export function Hero({
                   ))}
                 </ul>
               ) : null}
-
-              <Badge />
             </div>
           </div>
         </div>
       </HeroMotion>
     </section>
-  );
-}
-
-/** شارة دائرية تدور حول سهم يشير للأسفل. */
-function Badge() {
-  return (
-    <a
-      href="#after-hero"
-      data-hero-visual
-      aria-label="انتقل إلى المحتوى"
-      className="group text-accent-300 relative hidden size-36 shrink-0 place-items-center sm:grid lg:size-44"
-    >
-      <svg
-        data-spin
-        viewBox="0 0 200 200"
-        className="absolute inset-0 size-full"
-        aria-hidden="true"
-      >
-        <defs>
-          <path id="badge-circle" d="M100,100 m-76,0 a76,76 0 1,1 152,0 a76,76 0 1,1 -152,0" />
-        </defs>
-        <text fill="currentColor" fontSize="15" fontWeight="700">
-          <textPath href="#badge-circle">
-            طباعة ◆ تغليف ◆ لوحات ◆ هدايا ◆ أكريليك ◆ استيكرات ◆
-          </textPath>
-        </text>
-      </svg>
-      <span className="bg-accent-500 text-accent-contrast grid size-16 place-items-center rounded-full transition-transform duration-300 group-hover:scale-110 lg:size-20">
-        <Icon name="chevronDown" className="size-7" strokeWidth={2.2} />
-      </span>
-    </a>
   );
 }

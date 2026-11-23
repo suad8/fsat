@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/site/PageHeader";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { ShopFilters } from "@/components/shop/ShopFilters";
 import { ButtonLink } from "@/components/ui/Button";
+import { Reveal } from "@/components/ui/Reveal";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getCategories, getProducts } from "@/lib/queries";
 import { breadcrumbJsonLd, JsonLd } from "@/lib/seo";
@@ -37,6 +38,7 @@ export default async function ShopPage({
       <JsonLd data={breadcrumbJsonLd([{ label: "المتجر", href: "/shop" }])} />
 
       <PageHeader
+        compact
         eyebrow="المتجر"
         title="منتجات الطباعة والتجهيزات الدعائية"
         description="اختر المنتج، حدّد المقاس والخامة والكمية، وشاهد السعر يتحدّث أمامك قبل الطلب. المنتجات ذات المواصفات الخاصة تُسعَّر بعرض سعر خلال يوم عمل."
@@ -48,7 +50,7 @@ export default async function ShopPage({
         }
       />
 
-      <div className="container-page py-10 md:py-14">
+      <div className="container-page py-6 md:py-8">
         {/* Suspense مطلوب لأن ShopFilters يقرأ useSearchParams */}
         <Suspense fallback={<div className="mb-8 h-40" />}>
           <ShopFilters
@@ -56,6 +58,7 @@ export default async function ShopPage({
               slug: category.slug,
               name: category.name,
               count: category._count.products,
+              iconKey: category.iconKey,
             }))}
             resultCount={products.length}
           />
@@ -83,10 +86,10 @@ export default async function ShopPage({
           />
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
-              <li key={product.id}>
+            {products.map((product, index) => (
+              <Reveal as="li" key={product.id} delay={(index % 4) * 70}>
                 <ProductCard product={product} />
-              </li>
+              </Reveal>
             ))}
           </ul>
         )}

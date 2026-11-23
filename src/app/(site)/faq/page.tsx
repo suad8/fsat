@@ -39,6 +39,7 @@ export default async function FaqPage() {
       />
 
       <PageHeader
+        compact
         eyebrow="مركز المساعدة"
         title="الأسئلة الشائعة"
         description="جمعنا هنا أكثر ما يسأل عنه عملاؤنا. إن لم تجد إجابتك، نحن على واتساب."

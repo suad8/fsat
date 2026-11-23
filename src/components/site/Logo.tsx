@@ -32,7 +32,7 @@ export function Logo({
       width={logo.width}
       height={logo.height}
       priority={priority}
-      className="h-10 w-auto md:h-11"
+      className="h-11 w-auto md:h-14"
     />
   ) : (
     <TextLogo variant={variant} />

@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/site/PageHeader";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { ShopFilters } from "@/components/shop/ShopFilters";
 import { ButtonLink } from "@/components/ui/Button";
+import { Reveal } from "@/components/ui/Reveal";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getCategories, getCategoryBySlug, getProducts } from "@/lib/queries";
 import { breadcrumbJsonLd, JsonLd } from "@/lib/seo";
@@ -78,6 +79,7 @@ export default async function CategoryPage({
       <JsonLd data={breadcrumbJsonLd(crumbs)} />
 
       <PageHeader
+        compact
         eyebrow="قسم"
         title={category.name}
         description={category.description}
@@ -89,13 +91,14 @@ export default async function CategoryPage({
         }
       />
 
-      <div className="container-page py-10 md:py-14">
+      <div className="container-page py-6 md:py-8">
         <Suspense fallback={<div className="mb-8 h-40" />}>
           <ShopFilters
             categories={categories.map((item) => ({
               slug: item.slug,
               name: item.name,
               count: item._count.products,
+              iconKey: item.iconKey,
             }))}
             activeCategory={category.slug}
             resultCount={products.length}
@@ -129,10 +132,10 @@ export default async function CategoryPage({
           />
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
-              <li key={product.id}>
+            {products.map((product, index) => (
+              <Reveal as="li" key={product.id} delay={(index % 4) * 70}>
                 <ProductCard product={product} />
-              </li>
+              </Reveal>
             ))}
           </ul>
         )}

@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
 
-import { Icon } from "@/components/ui/Icon";
+import { Icon, resolveIcon } from "@/components/ui/Icon";
+import { gsap, MOTION_OK } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 
 const SORT_OPTIONS = [
@@ -25,7 +27,7 @@ export function ShopFilters({
   activeCategory,
   resultCount,
 }: {
-  categories: { slug: string; name: string; count: number }[];
+  categories: { slug: string; name: string; count: number; iconKey?: string | null }[];
   activeCategory?: string;
   resultCount: number;
 }) {
@@ -58,7 +60,15 @@ export function ShopFilters({
   }
 
   return (
-    <div className="mb-8 space-y-5">
+    <div className="mb-8 space-y-6">
+      {/* الأقسام أولًا: أول ما يراه العميل بلا نزول */}
+      <CategoryTiles
+        categories={categories}
+        activeCategory={activeCategory}
+        totalCount={categories.reduce((sum, category) => sum + category.count, 0)}
+        href={(base) => buildHref(base, searchParams)}
+      />
+
       {/* البحث والترتيب */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <form
@@ -115,31 +125,6 @@ export function ShopFilters({
         </div>
       </div>
 
-      {/* شرائط التصنيفات — قابلة للتمرير أفقيًا على الجوال */}
-      <nav aria-label="تصنيفات المنتجات">
-        <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          <li>
-            <CategoryChip
-              href={buildHref("/shop", searchParams)}
-              active={!activeCategory}
-            >
-              الكل
-            </CategoryChip>
-          </li>
-          {categories.map((category) => (
-            <li key={category.slug}>
-              <CategoryChip
-                href={buildHref(`/shop/${category.slug}`, searchParams)}
-                active={activeCategory === category.slug}
-              >
-                {category.name}
-                <span className="text-[0.7rem] opacity-70">({category.count})</span>
-              </CategoryChip>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
       {/* عدد النتائج ومسح الفلاتر */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p aria-live="polite" className="text-primary-600 text-sm">
@@ -179,28 +164,92 @@ function buildHref(base: string, params: URLSearchParams): string {
   return query ? `${base}?${query}` : base;
 }
 
-function CategoryChip({
+function CategoryTiles({
+  categories,
+  activeCategory,
+  totalCount,
   href,
-  active,
-  children,
 }: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
+  categories: { slug: string; name: string; count: number; iconKey?: string | null }[];
+  activeCategory?: string;
+  totalCount: number;
+  href: (base: string) => string;
 }) {
+  const scope = useRef<HTMLElement>(null);
+
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add(MOTION_OK, () => {
+        gsap.fromTo(
+          "[data-tile]",
+          { autoAlpha: 0, y: 22, scale: 0.94 },
+          { autoAlpha: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out", stagger: 0.05 },
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope },
+  );
+
+  const tiles = [
+    { slug: "", name: "كل المنتجات", count: totalCount, icon: "package" as const },
+    ...categories
+      .filter((category) => category.count > 0 || category.slug === activeCategory)
+      .map((category) => ({
+      slug: category.slug,
+      name: category.name,
+      count: category.count,
+      icon: resolveIcon(category.iconKey ?? null),
+    })),
+  ];
+
   return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold whitespace-nowrap transition-colors",
-        "focus-visible:outline-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2",
-        active
-          ? "bg-primary-950 text-white"
-          : "bg-surface-sunken text-primary-700 hover:bg-primary-200",
-      )}
-    >
-      {children}
-    </Link>
+    <nav ref={scope} aria-label="أقسام المتجر">
+      {/* جوال: صفّان قابلان للسحب أفقيًا — شاشات أكبر: شبكة مرئية بالكامل */}
+      <ul className="no-scrollbar -mx-4 grid auto-cols-[11.5rem] grid-flow-col grid-rows-2 gap-2.5 overflow-x-auto px-4 pb-1 [scroll-snap-type:x_proximity] sm:mx-0 sm:auto-cols-auto sm:grid-flow-row sm:grid-cols-3 sm:grid-rows-none sm:overflow-visible sm:px-0 md:grid-cols-4 lg:grid-cols-5 lg:gap-3">
+        {tiles.map((tile) => {
+          const active = (activeCategory ?? "") === tile.slug;
+          return (
+            <li key={tile.slug || "all"} data-tile className="[scroll-snap-align:start]">
+              <Link
+                href={href(tile.slug ? `/shop/${tile.slug}` : "/shop")}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group flex h-full items-center gap-3 rounded-2xl border p-3 transition-[transform,box-shadow,background-color,border-color] duration-300",
+                  "focus-visible:outline-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2",
+                  active
+                    ? "bg-ink border-ink text-white shadow-card-hover"
+                    : "border-border bg-surface hover:border-accent-500 hover:shadow-card-hover text-primary-900 hover:-translate-y-0.5",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "grid size-11 shrink-0 place-items-center rounded-xl transition-colors duration-300",
+                    active
+                      ? "bg-accent-500 text-accent-contrast"
+                      : "bg-surface-sunken text-primary-700 group-hover:bg-accent-500 group-hover:text-accent-contrast",
+                  )}
+                >
+                  <Icon name={tile.icon} className="size-5" strokeWidth={1.6} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-extrabold">{tile.name}</span>
+                  <span
+                    className={cn(
+                      "block text-xs font-medium",
+                      active ? "text-primary-300" : "text-primary-500",
+                    )}
+                  >
+                    {tile.count} {tile.count === 1 ? "منتج" : "منتجات"}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }

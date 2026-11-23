@@ -54,6 +54,7 @@ export default async function QuotePage({ searchParams }: { searchParams: Search
       <JsonLd data={breadcrumbJsonLd([{ label: "طلب عرض سعر", href: "/quote" }])} />
 
       <PageHeader
+        compact
         eyebrow="عرض سعر"
         title="أرسل مواصفات طلبك واستلم عرض السعر"
         description="كلما كانت التفاصيل أوضح، كان العرض أدقّ وأسرع. أرفق التصميم أو صورة توضيحية إن توفّرت."
