@@ -319,3 +319,15 @@ export function resolvePrivateFile(filename: string): string | null {
 
   return resolved;
 }
+
+/** يحوّل (مجلد، اسم) من الرابط إلى مسار داخل public/uploads، أو null إن لم يطابق ما نولّده. */
+export function resolvePublicUpload(folder: string, filename: string): string | null {
+  if (!ALLOWED_FOLDERS.has(folder)) return null;
+  if (!/^[a-z0-9]+-[a-f0-9]{16}\.webp$/i.test(filename)) return null;
+
+  const root = path.resolve(PUBLIC_DIR);
+  const resolved = path.resolve(root, folder, filename);
+  if (!resolved.startsWith(root + path.sep)) return null;
+
+  return resolved;
+}

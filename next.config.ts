@@ -41,6 +41,20 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   /*
+   * الصور المرفوعة تُقدَّم عبر مسار API لأن next start لا يخدم ملفات public/
+   * المضافة بعد البناء (انظر src/app/api/media). beforeFiles ليسبق ملفات public.
+   */
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/uploads/:folder/:filename", destination: "/api/media/:folder/:filename" },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
+
+  /*
    * الترويسات الأمنية.
    *
    * لوحة الإدارة (/admin) ومسارات /api لا تأخذ CSP من هنا: لوحة الإدارة تحصل على
