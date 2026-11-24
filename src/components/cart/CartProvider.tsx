@@ -50,6 +50,20 @@ export type CartItem = {
   total: number;
   options: CartItemOption[];
   notes?: string;
+  /** الحد الأدنى وخطوة الكمية — لتعمل أزرار +/− في السلة بمضاعفات صحيحة. */
+  minQuantity?: number;
+  quantityStep?: number;
+  /** رابط صفحة المنتج — لتعديل المواصفات من السلة. بنود قديمة قد تخلو منه. */
+  href?: string;
+  /** ملفات التصميم المرفوعة مع البند (للعرض والنقل مع الطلب). */
+  files?: CartItemFile[];
+};
+
+export type CartItemFile = {
+  name: string;
+  url: string;
+  size: number;
+  mimeType: string;
 };
 
 const STORAGE_KEY = "fsat.cart.v1";
@@ -167,6 +181,10 @@ type CartContextValue = {
   addItem: (item: Omit<CartItem, "lineId">) => void;
   updateQuantity: (lineId: string, quantity: number) => void;
   removeItem: (lineId: string) => void;
+  /** يحدّث أسعار البنود بما حقّقه الخادم (للعرض فقط — الخادم يعيد الحساب عند الطلب). */
+  applyServerPrices: (
+    updates: { lineId: string; quantity: number; unitPrice: number; total: number }[],
+  ) => void;
   clear: () => void;
 };
 
@@ -235,6 +253,34 @@ export function CartProvider({ children }: { children: ReactNode }) {
     write(getSnapshot().filter((item) => item.lineId !== lineId));
   }, []);
 
+  const applyServerPrices = useCallback<CartContextValue["applyServerPrices"]>((updates) => {
+    const current = getSnapshot();
+    let changed = false;
+
+    const next = current.map((item) => {
+      const update = updates.find((entry) => entry.lineId === item.lineId);
+      if (!update) return item;
+      if (
+        update.unitPrice === item.unitPrice &&
+        update.total === item.total &&
+        update.quantity === item.quantity
+      ) {
+        return item;
+      }
+      changed = true;
+      return {
+        ...item,
+        quantity: update.quantity,
+        unitPrice: update.unitPrice,
+        total: update.total,
+        // الرسوم الثابتة = الإجمالي − (سعر الوحدة × الكمية)
+        flatFees: Math.max(0, round2(update.total - update.unitPrice * update.quantity)),
+      };
+    });
+
+    if (changed) write(next);
+  }, []);
+
   const clear = useCallback(() => write(EMPTY), []);
 
   const value = useMemo<CartContextValue>(
@@ -246,9 +292,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addItem,
       updateQuantity,
       removeItem,
+      applyServerPrices,
       clear,
     }),
-    [items, hydrated, addItem, updateQuantity, removeItem, clear],
+    [items, hydrated, addItem, updateQuantity, removeItem, applyServerPrices, clear],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

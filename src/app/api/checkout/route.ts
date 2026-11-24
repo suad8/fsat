@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 import { createOrder } from "@/lib/orders";
 import { apiError, guardJsonPost, honeypotTripped, internalError } from "@/lib/security/api";
+import { getSettings } from "@/lib/settings";
+import { initiatePayment, isPaymentAllowed } from "@/lib/shop/payments";
+import { absoluteUrl } from "@/lib/utils";
 import { checkoutSchema, fieldErrors } from "@/lib/validation";
 
 /**
@@ -33,8 +36,18 @@ export async function POST(request: Request) {
     return apiError(422, "تحقّق من البيانات المطلوبة.", { errors: fieldErrors(parsed.error) });
   }
 
+  const data = parsed.data;
+
   try {
-    const result = await createOrder(parsed.data);
+    // طريقة الدفع يجب أن تكون مفعّلة فعلاً ومناسبة لطريقة الاستلام
+    const settings = await getSettings();
+    if (!isPaymentAllowed(settings.payment, data.paymentMethod, data.fulfillment)) {
+      return apiError(422, "طريقة الدفع المختارة غير متاحة لهذا الطلب. اختر طريقة أخرى.", {
+        errors: { paymentMethod: "اختر طريقة دفع متاحة." },
+      });
+    }
+
+    const result = await createOrder(data);
 
     if (!result.ok) {
       return apiError(422, result.error, {
@@ -42,10 +55,21 @@ export async function POST(request: Request) {
       });
     }
 
+    // الطرق الإلكترونية: يعيد المحوّل رابط الدفع. الطرق غير الإلكترونية: لا شيء.
+    const payment = await initiatePayment(data.paymentMethod, {
+      orderNumber: result.orderNumber,
+      total: result.total,
+      currency: "SAR",
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      returnUrl: absoluteUrl(`/checkout/success?order=${encodeURIComponent(result.orderNumber)}`),
+    });
+
     return NextResponse.json({
       ok: true,
       orderNumber: result.orderNumber,
       total: result.total,
+      payment,
     });
   } catch (error) {
     return internalError("checkout", error, "تعذّر إتمام الطلب. حاول مرة أخرى أو تواصل معنا عبر واتساب.");
