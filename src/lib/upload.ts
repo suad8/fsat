@@ -25,6 +25,11 @@ import { MAX_DESIGN_SIZE, MAX_IMAGE_SIZE } from "@/lib/constants";
  *
  *  ٤. أسماء الملفات تُولَّد عشوائيًا ولا يُستخدم الاسم الأصلي في المسار
  *     إطلاقًا — فلا مجال لاختراق المسار (path traversal) ولا للكتابة فوق ملف.
+ *
+ *  ٥. أي ملف يبدو كوثيقة نصية/ترميز (SVG, HTML, XML, سكربت) يُرفض صراحةً حتى
+ *     لو غُيّر امتداده، وصور "قنبلة الضغط" تُرفض بحدّ على عدد البكسلات قبل الفك.
+ *
+ *  ٦. المجلد الوجهة من قائمة بيضاء صارمة داخل هذه الدالة نفسها، لا ثقةً بالمستدعي.
  * ============================================================================
  */
 
@@ -43,7 +48,8 @@ export type StoredFile = {
   isPrivate: boolean;
 };
 
-export type UploadError = { error: string };
+/** code للسجلّ الأمني فقط؛ error نص آمن للعرض للمستخدم. */
+export type UploadError = { error: string; code: string };
 
 const PUBLIC_DIR = path.join(process.cwd(), "public", "uploads");
 const PRIVATE_DIR = path.join(process.cwd(), "private-uploads");
@@ -137,6 +143,31 @@ function detect(bytes: Uint8Array): Signature | null {
   return SIGNATURES.find((signature) => signature.test(bytes)) ?? null;
 }
 
+/**
+ * ملف نصي/ترميزي (SVG, HTML, XML, JS). لا توقيعة له في القائمة فكان سيُرفض أصلًا،
+ * لكن نكشفه صراحةً ليُسجَّل كمحاولة مشبوهة لا كملف تالف.
+ */
+function looksLikeMarkup(bytes: Uint8Array): boolean {
+  const head = new TextDecoder("utf-8", { fatal: false })
+    .decode(bytes.subarray(0, 512))
+    .replace(/^\uFEFF/, "")
+    .trimStart()
+    .toLowerCase();
+
+  return /^(<\?xml|<svg|<!doctype|<html|<script|<body|<head|<iframe|<img|<a\s|<!--)/.test(head);
+}
+
+/** مجلدات الوجهة المسموحة داخل public/uploads. */
+const ALLOWED_FOLDERS = new Set([
+  "uploads",
+  "customer",
+  "products",
+  "projects",
+  "services",
+  "equipment",
+  "brand",
+]);
+
 // ---------------------------------------------------------------------------
 // الحفظ
 // ---------------------------------------------------------------------------
@@ -150,11 +181,25 @@ function randomName(extension: string): string {
 /** تنظيف الاسم الأصلي قبل تخزينه كنص للعرض. */
 function safeDisplayName(name: string): string {
   return name
-    .replace(/[\r\n\t]/g, " ")
+    // محارف تحكم + محارف اتجاه تُستعمل لانتحال الامتداد (مثل ‮)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
     .replace(/[/\\]/g, "-")
     .trim()
     .slice(0, 200);
 }
+
+/** صيغة sharp المتوقعة لكل توقيعة — يمنع ملفًا بترويسة PNG وجسم مختلف. */
+const SHARP_FORMATS: Record<string, string[]> = {
+  "image/jpeg": ["jpeg"],
+  "image/png": ["png"],
+  "image/webp": ["webp"],
+  "image/avif": ["heif", "avif"],
+  "image/tiff": ["tiff"],
+};
+
+/** حدّ البكسلات الكلي قبل فك الترميز (قنبلة الضغط). */
+const MAX_INPUT_PIXELS = 12000 * 12000;
 
 export async function storeUpload(
   file: File,
@@ -163,22 +208,33 @@ export async function storeUpload(
 ): Promise<StoredFile | UploadError> {
   const maxSize = kind === "image" ? MAX_IMAGE_SIZE : MAX_DESIGN_SIZE;
 
+  if (!ALLOWED_FOLDERS.has(folder)) {
+    return { error: "وجهة الرفع غير مسموحة.", code: "bad_folder" };
+  }
+
   if (file.size === 0) {
-    return { error: "الملف فارغ." };
+    return { error: "الملف فارغ.", code: "empty" };
   }
 
   if (file.size > maxSize) {
     const mb = Math.round(maxSize / (1024 * 1024));
-    return { error: `حجم الملف يتجاوز الحد المسموح (${mb} ميجابايت).` };
+    return { error: `حجم الملف يتجاوز الحد المسموح (${mb} ميجابايت).`, code: "too_large" };
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const signature = detect(new Uint8Array(buffer.subarray(0, 32)));
+  // file.size يأتي من المتصفّح؛ الحجم الحقيقي هو ما قرأناه فعلًا
+  if (buffer.byteLength > maxSize) {
+    return { error: "حجم الملف يتجاوز الحد المسموح.", code: "too_large" };
+  }
+
+  const head = new Uint8Array(buffer.subarray(0, 32));
+  const signature = detect(head);
 
   if (!signature) {
     return {
       error:
         "صيغة الملف غير مدعومة. الصيغ المقبولة: JPG، PNG، WEBP، PDF، AI، PSD، ZIP.",
+      code: looksLikeMarkup(new Uint8Array(buffer.subarray(0, 512))) ? "markup" : "unknown_type",
     };
   }
 
@@ -187,15 +243,24 @@ export async function storeUpload(
   // --- الصور: إعادة ترميز كاملة ---
   if (signature.kind === "raster") {
     try {
-      const pipeline = sharp(buffer, { failOn: "error" }).rotate(); // rotate() يطبّق اتجاه EXIF ثم يسقطه
+      const pipeline = sharp(buffer, {
+        failOn: "error",
+        limitInputPixels: MAX_INPUT_PIXELS,
+      }).rotate(); // rotate() يطبّق اتجاه EXIF ثم يسقطه
 
       const metadata = await pipeline.metadata();
 
-      // حدّ أعلى للأبعاد يمنع صور "قنبلة الضغط" التي تستهلك الذاكرة عند الفك
-      if ((metadata.width ?? 0) > 12000 || (metadata.height ?? 0) > 12000) {
-        return { error: "أبعاد الصورة كبيرة جدًا." };
+      // البايتات الأولى ادّعت صيغة؛ المحلّل الفعلي يجب أن يوافق (يكشف ملفات مركّبة)
+      if (!metadata.format || !SHARP_FORMATS[signature.mime]?.includes(metadata.format)) {
+        return { error: "الملف ليس صورة سليمة.", code: "format_mismatch" };
       }
 
+      // حدّ أعلى للأبعاد يمنع صور "قنبلة الضغط" التي تستهلك الذاكرة عند الفك
+      if ((metadata.width ?? 0) > 12000 || (metadata.height ?? 0) > 12000) {
+        return { error: "أبعاد الصورة كبيرة جدًا.", code: "dimensions" };
+      }
+
+      // لا withMetadata() → تُسقط EXIF وGPS وملفات الألوان المضمّنة والتعليقات
       const output = await pipeline
         .resize({ width: 2400, height: 2400, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 82 })
@@ -204,7 +269,8 @@ export async function storeUpload(
       const filename = randomName("webp");
       const directory = path.join(PUBLIC_DIR, folder);
       await mkdir(directory, { recursive: true });
-      await writeFile(path.join(directory, filename), output.data);
+      // wx: لا كتابة فوق ملف موجود أبدًا
+      await writeFile(path.join(directory, filename), output.data, { flag: "wx", mode: 0o644 });
 
       return {
         url: `/uploads/${folder}/${filename}`,
@@ -217,18 +283,21 @@ export async function storeUpload(
         isPrivate: false,
       };
     } catch {
-      return { error: "تعذّرت معالجة الصورة. تأكّد أن الملف صورة سليمة." };
+      return {
+        error: "تعذّرت معالجة الصورة. تأكّد أن الملف صورة سليمة.",
+        code: "decode_failed",
+      };
     }
   }
 
   // --- ملفات التصاميم: حفظ خارج public ---
   if (kind !== "design") {
-    return { error: "هذا الحقل يقبل الصور فقط." };
+    return { error: "هذا الحقل يقبل الصور فقط.", code: "wrong_kind" };
   }
 
   const filename = randomName(signature.extension);
-  await mkdir(PRIVATE_DIR, { recursive: true });
-  await writeFile(path.join(PRIVATE_DIR, filename), buffer);
+  await mkdir(PRIVATE_DIR, { recursive: true, mode: 0o750 });
+  await writeFile(path.join(PRIVATE_DIR, filename), buffer, { flag: "wx", mode: 0o640 });
 
   return {
     // يُخدَم عبر /api/admin/files/[filename] المحمي بجلسة الإدارة

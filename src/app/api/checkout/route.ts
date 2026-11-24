@@ -1,65 +1,53 @@
 import { NextResponse } from "next/server";
 
 import { createOrder } from "@/lib/orders";
-import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { apiError, guardJsonPost, honeypotTripped, internalError } from "@/lib/security/api";
 import { checkoutSchema, fieldErrors } from "@/lib/validation";
 
-/** إنشاء طلب جديد بعد إعادة تسعيره بالكامل على الخادم. */
+/**
+ * إنشاء طلب جديد بعد إعادة تسعيره بالكامل على الخادم.
+ *
+ * لا يوجد هنا أي مسار يقرأ طلبًا: الاستجابة تحوي رقم طلب العميل نفسه فقط
+ * (لا IDOR). أي ميزة "تتبّع الطلب" مستقبلية يجب أن تطلب رقم الطلب + الجوال معًا
+ * وتحدّ المعدّل وتردّ برسالة موحّدة (انظر docs/SECURITY.md).
+ */
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
-  const limit = rateLimit(clientKey(request, "checkout"), {
+  const guard = await guardJsonPost(request, {
+    scope: "checkout",
     limit: 10,
     windowMs: 10 * 60 * 1000,
+    maxBytes: 128 * 1024,
+    rateLimitMessage: "محاولات كثيرة خلال وقت قصير. انتظر قليلاً ثم أعد المحاولة.",
   });
+  if (!guard.ok) return guard.response;
 
-  if (!limit.allowed) {
-    return NextResponse.json(
-      { ok: false, message: "محاولات كثيرة خلال وقت قصير. انتظر قليلاً ثم أعد المحاولة." },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
-
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json({ ok: false, message: "صيغة الطلب غير صحيحة." }, { status: 400 });
-  }
-
-  const parsed = checkoutSchema.safeParse(payload);
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "تحقّق من البيانات المطلوبة.",
-        errors: fieldErrors(parsed.error),
-      },
-      { status: 422 },
-    );
-  }
-
-  const data = parsed.data;
-
-  if (data.website) {
+  if (honeypotTripped(guard.payload, request, "checkout")) {
     return NextResponse.json({ ok: true, orderNumber: "—", total: 0 });
   }
 
-  const result = await createOrder(data);
+  const parsed = checkoutSchema.safeParse(guard.payload);
 
-  if (!result.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: result.error,
-        errors: result.field ? { [result.field]: result.error } : undefined,
-      },
-      { status: 422 },
-    );
+  if (!parsed.success) {
+    return apiError(422, "تحقّق من البيانات المطلوبة.", { errors: fieldErrors(parsed.error) });
   }
 
-  return NextResponse.json({
-    ok: true,
-    orderNumber: result.orderNumber,
-    total: result.total,
-  });
+  try {
+    const result = await createOrder(parsed.data);
+
+    if (!result.ok) {
+      return apiError(422, result.error, {
+        errors: result.field ? { [result.field]: result.error } : undefined,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      orderNumber: result.orderNumber,
+      total: result.total,
+    });
+  } catch (error) {
+    return internalError("checkout", error, "تعذّر إتمام الطلب. حاول مرة أخرى أو تواصل معنا عبر واتساب.");
+  }
 }

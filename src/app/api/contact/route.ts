@@ -1,54 +1,34 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { apiError, guardJsonPost, honeypotTripped, internalError } from "@/lib/security/api";
 import { contactMessageSchema, fieldErrors } from "@/lib/validation";
 
 /** استقبال رسائل نموذج "اتصل بنا". */
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
-  const limit = rateLimit(clientKey(request, "contact"), {
+  const guard = await guardJsonPost(request, {
+    scope: "contact",
     limit: 5,
     windowMs: 10 * 60 * 1000,
+    maxBytes: 16 * 1024,
+    rateLimitMessage: "أرسلت عدة رسائل خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى.",
   });
+  if (!guard.ok) return guard.response;
 
-  if (!limit.allowed) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "أرسلت عدة رسائل خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى.",
-      },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
+  // الحقل الفخّ: نجاح ظاهري بلا حفظ (قبل Zod حتى لا يرى الروبوت رسالة خطأ)
+  if (honeypotTripped(guard.payload, request, "contact")) {
+    return NextResponse.json({ ok: true });
   }
 
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json(
-      { ok: false, message: "صيغة الطلب غير صحيحة." },
-      { status: 400 },
-    );
-  }
-
-  const parsed = contactMessageSchema.safeParse(payload);
+  const parsed = contactMessageSchema.safeParse(guard.payload);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "تحقّق من الحقول المطلوبة.",
-        errors: fieldErrors(parsed.error),
-      },
-      { status: 422 },
-    );
+    return apiError(422, "تحقّق من الحقول المطلوبة.", { errors: fieldErrors(parsed.error) });
   }
 
   const data = parsed.data;
-
-  if (data.website) {
-    return NextResponse.json({ ok: true });
-  }
 
   try {
     await prisma.contactMessage.create({
@@ -63,13 +43,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("[contact] فشل حفظ الرسالة:", error);
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "تعذّر إرسال الرسالة. حاول مرة أخرى أو تواصل معنا عبر واتساب.",
-      },
-      { status: 500 },
+    return internalError(
+      "contact",
+      error,
+      "تعذّر إرسال الرسالة. حاول مرة أخرى أو تواصل معنا عبر واتساب.",
     );
   }
 }

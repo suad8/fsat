@@ -1,30 +1,35 @@
 import { compare, hash } from "bcryptjs";
-import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
 import type { AdminRole } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { logSecurityEvent, maskEmail } from "@/lib/security/log";
+import { isKnownDefaultPassword } from "@/lib/security/password";
+import { securityStamp, verifySessionToken } from "@/lib/security/session";
+import {
+  SESSION_COOKIE,
+  sessionCookieOptions,
+  signSessionToken,
+} from "@/lib/security/session-token";
 
 /**
  * ============================================================================
  *  مصادقة لوحة التحكم
  * ============================================================================
- *  جلسة قائمة على JWT موقّع محفوظ في كوكي httpOnly:
+ *  جلسة JWT موقّع في كوكي:
  *
- *   • httpOnly  → لا يمكن لأي سكربت في الصفحة قراءة الكوكي، فحتى لو حدثت
- *                 ثغرة XSS لا تُسرق الجلسة.
- *   • sameSite=lax → يمنع إرسال الكوكي مع طلبات من مواقع أخرى (CSRF)، مع
- *                 إبقاء التنقّل العادي بالروابط يعمل.
- *   • secure    → في الإنتاج فقط، حتى يعمل التطوير على http محليًا.
+ *   • httpOnly   → لا يقرأه أي سكربت، فحتى مع XSS لا تُسرق الجلسة.
+ *   • sameSite=lax → لا يُرسل مع طلبات من مواقع أخرى (+ فحص Origin في الـ proxy).
+ *   • secure + __Host- في الإنتاج → HTTPS فقط وبلا نطاق (انظر session-token.ts).
+ *   • عمر قصير بتجديد منزلق (ساعتان خمول / ١٢ ساعة سقف) — يجدّده الـ proxy.
  *
- *  التوقيع يستخدم AUTH_SECRET. في الإنتاج غيابه يوقف التطبيق عمدًا بدل
- *  الرجوع لمفتاح افتراضي معروف — وهو ما يجعل تزوير الجلسات ممكنًا.
+ *  التوكن لا يحمل الدور؛ كل تحقق يقرأ الحساب من القاعدة (فعّال؟ نفس بصمة كلمة
+ *  المرور؟ ما دوره الآن؟) فتعطيل حساب أو تغيير كلمة مروره يُبطل جلساته فورًا.
+ *
+ *  لا سرّ افتراضي في الإنتاج: انظر src/lib/security/env.ts.
  * ============================================================================
  */
-
-const COOKIE_NAME = "fsat_admin_session";
-const SESSION_DAYS = 7;
 
 export type SessionUser = {
   id: string;
@@ -33,33 +38,29 @@ export type SessionUser = {
   role: AdminRole;
 };
 
-function getSecret(): Uint8Array {
-  const secret = process.env.AUTH_SECRET;
-
-  if (!secret || secret.length < 32) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "AUTH_SECRET مفقود أو قصير. اضبط قيمة عشوائية بطول ٣٢ حرفًا على الأقل قبل النشر.",
-      );
-    }
-    // للتطوير المحلي فقط — لا يُستخدم في الإنتاج بسبب الشرط أعلاه
-    return new TextEncoder().encode("dev-only-insecure-secret-change-me-please");
-  }
-
-  return new TextEncoder().encode(secret);
-}
-
 // ---------------------------------------------------------------------------
 // كلمات المرور
 // ---------------------------------------------------------------------------
 
+/** عامل تكلفة ١٢ — توصية OWASP الدنيا ١٠؛ ١٢ توازن جيد بين مقاومة التخمين وزمن الدخول. */
+const BCRYPT_COST = 12;
+
 export function hashPassword(password: string): Promise<string> {
-  // عامل تكلفة ١٢ — توازن معقول بين مقاومة التخمين وزمن تسجيل الدخول
-  return hash(password, 12);
+  return hash(password, BCRYPT_COST);
 }
 
 export function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
   return compare(password, passwordHash);
+}
+
+/**
+ * تجزئة حقيقية بنفس التكلفة تُقارَن بها كلمة المرور عندما لا يوجد الحساب.
+ * (تجزئة غير صالحة الشكل تُرفض فورًا فيظهر فرق زمني يكشف وجود الحساب.)
+ */
+let dummyHash: Promise<string> | null = null;
+function getDummyHash(): Promise<string> {
+  dummyHash ??= hash(`dummy:${crypto.randomUUID()}`, BCRYPT_COST);
+  return dummyHash;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,82 +68,74 @@ export function verifyPassword(password: string, passwordHash: string): Promise<
 // ---------------------------------------------------------------------------
 
 export async function createSession(user: SessionUser): Promise<void> {
-  const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const record = await prisma.adminUser.findUnique({
+    where: { id: user.id },
+    select: { passwordHash: true, isActive: true },
+  });
+  if (!record || !record.isActive) throw new Error("UNAUTHORIZED");
 
-  const token = await new SignJWT({
-    sub: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(expires)
-    .sign(getSecret());
+  const { token, maxAge } = await signSessionToken({
+    userId: user.id,
+    securityStamp: securityStamp(record.passwordHash),
+  });
 
   const store = await cookies();
-  store.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires,
-  });
+  store.set(SESSION_COOKIE, token, sessionCookieOptions(maxAge));
 }
 
 export async function destroySession(): Promise<void> {
   const store = await cookies();
-  store.delete(COOKIE_NAME);
+  // set بنفس السمات (لا delete): بادئة __Host- تتطلب Secure حتى عند المسح
+  store.set(SESSION_COOKIE, "", { ...sessionCookieOptions(0), expires: new Date(0) });
 }
 
 /**
- * قراءة الجلسة الحالية.
- * cache() يمنع إعادة التحقق من التوقيع عند كل استدعاء داخل الطلب الواحد.
+ * قراءة الجلسة الحالية **مع التحقق العميق** (توقيع + الحساب فعّال + البصمة).
+ * cache() يمنع التكرار داخل الطلب الواحد.
  */
 export const getSession = cache(async (): Promise<SessionUser | null> => {
   const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
+  const token = store.get(SESSION_COOKIE)?.value;
 
   if (!token) return null;
 
   try {
-    const { payload } = await jwtVerify(token, getSecret(), { algorithms: ["HS256"] });
-
-    if (!payload.sub || typeof payload.email !== "string") return null;
-
-    return {
-      id: payload.sub,
-      email: payload.email,
-      name: typeof payload.name === "string" ? payload.name : payload.email,
-      role: (payload.role as AdminRole) ?? "ADMIN",
-    };
+    const verified = await verifySessionToken(token);
+    return verified?.user ?? null;
   } catch {
-    // توقيع غير صالح أو جلسة منتهية
+    // فشل بنيوي (مثل سرّ غير صالح في الإنتاج): نفشل مغلقين
     return null;
   }
 });
 
-/**
- * يتحقق من الجلسة **ومن أن الحساب ما زال فعّالاً في القاعدة**.
- *
- * التحقق من القاعدة مهم: تعطيل حساب مدير يجب أن يمنعه فورًا، لا أن ينتظر
- * انتهاء صلاحية التوكن بعد أيام.
- */
+/** يتطلب جلسة إدارة صالحة وحسابًا فعّالًا. الدور هنا هو دور القاعدة الحالي. */
 export async function requireAdmin(): Promise<SessionUser> {
   const session = await getSession();
   if (!session) throw new Error("UNAUTHORIZED");
-
-  const user = await prisma.adminUser.findUnique({
-    where: { id: session.id },
-    select: { id: true, isActive: true },
-  });
-
-  if (!user || !user.isActive) throw new Error("UNAUTHORIZED");
-
   return session;
 }
 
-/** محاولة تسجيل الدخول. */
+/** يتطلب أحد الأدوار المذكورة (مثلًا OWNER لإدارة المستخدمين). */
+export async function requireRole(...roles: AdminRole[]): Promise<SessionUser> {
+  const session = await requireAdmin();
+  if (!roles.includes(session.role)) {
+    logSecurityEvent("forbidden", { userId: session.id, role: session.role });
+    throw new Error("FORBIDDEN");
+  }
+  return session;
+}
+
+// ---------------------------------------------------------------------------
+// تسجيل الدخول
+// ---------------------------------------------------------------------------
+
+/** رسالة واحدة موحّدة لكل أسباب الفشل — تفريقها يكشف أي البريدات مسجّل لدينا. */
+export const GENERIC_LOGIN_ERROR = "بيانات الدخول غير صحيحة.";
+
+/**
+ * محاولة تسجيل الدخول (التحقق من البيانات فقط؛ التقييد والتسجيل في الإجراء).
+ * زمن التنفيذ متساوٍ تقريبًا سواء وُجد الحساب أم لا.
+ */
 export async function authenticate(
   email: string,
   password: string,
@@ -153,17 +146,22 @@ export async function authenticate(
     where: { email: normalizedEmail },
   });
 
-  // رسالة واحدة موحّدة للحالتين — تفريقها يكشف أي البريدين مسجّل لدينا
-  const genericError = "بيانات الدخول غير صحيحة.";
-
   if (!user || !user.isActive) {
-    // نقارن مع تجزئة وهمية حتى يتساوى زمن الرد ولا يُستدل على وجود الحساب
-    await compare(password, "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv");
-    return { ok: false, error: genericError };
+    await compare(password, await getDummyHash());
+    return { ok: false, error: GENERIC_LOGIN_ERROR };
   }
 
   const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) return { ok: false, error: genericError };
+  if (!valid) return { ok: false, error: GENERIC_LOGIN_ERROR };
+
+  if (process.env.NODE_ENV === "production" && isKnownDefaultPassword(password)) {
+    // نسمح بالدخول (لا نقفل المالك خارج نظامه) لكن نصرخ في السجلّ
+    logSecurityEvent(
+      "login_weak_default_password",
+      { email: maskEmail(normalizedEmail) },
+      "error",
+    );
+  }
 
   await prisma.adminUser.update({
     where: { id: user.id },
@@ -181,4 +179,4 @@ export async function authenticate(
   };
 }
 
-export const SESSION_COOKIE_NAME = COOKIE_NAME;
+export const SESSION_COOKIE_NAME = SESSION_COOKIE;

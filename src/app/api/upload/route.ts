@@ -3,50 +3,61 @@ import { NextResponse } from "next/server";
 import { MAX_FILES_PER_REQUEST } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { apiError, guardMultipartPost, internalError } from "@/lib/security/api";
+import { clientIp } from "@/lib/security/ip";
+import { logSecurityEvent } from "@/lib/security/log";
 import { storeUpload, type StoredFile } from "@/lib/upload";
 
 /**
  * رفع مرفقات العملاء (تصاميم وشعارات وصور توضيحية).
  *
  * مفتوح للزوار لأن رفع التصميم جزء من مسار الطلب قبل أي تسجيل دخول،
- * لذا محاط بحدّ معدّل صارم وبتحقق كامل من محتوى الملف في src/lib/upload.ts.
+ * لذا محاط بطبقات: فحص أصل، حدّ معدّل **يُحسب بعدد الملفات**، سقف لحجم الجسم
+ * يُفرض أثناء القراءة، وتحقق كامل من محتوى كل ملف في src/lib/upload.ts.
  */
 export const runtime = "nodejs";
 
+/** سقف الجسم الكلي: ملفان كبيران أو عدة ملفات صغيرة — لا خمسة بحجم ٢٥ ميجابايت. */
+const MAX_BODY_BYTES = 60 * 1024 * 1024;
+
 export async function POST(request: Request) {
-  const limit = rateLimit(clientKey(request, "upload"), {
-    limit: 20,
+  const guard = await guardMultipartPost(request, {
+    scope: "upload",
+    // حدّ على عدد *الطلبات*؛ وحدّ منفصل على عدد *الملفات* يُحسب بعد قراءة الجسم
+    limit: 12,
     windowMs: 10 * 60 * 1000,
+    maxBytes: MAX_BODY_BYTES,
+    rateLimitMessage: "تجاوزت عدد الملفات المسموح رفعها. حاول بعد قليل.",
   });
+  if (!guard.ok) return guard.response;
 
-  if (!limit.allowed) {
-    return NextResponse.json(
-      { ok: false, message: "تجاوزت عدد الملفات المسموح رفعها. حاول بعد قليل." },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
-
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    return NextResponse.json(
-      { ok: false, message: "تعذّرت قراءة الملفات المرسلة." },
-      { status: 400 },
-    );
-  }
+  const form = guard.form;
+  const ip = clientIp(request.headers);
 
   const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
   const kind = form.get("kind") === "image" ? "image" : "design";
 
   if (files.length === 0) {
-    return NextResponse.json({ ok: false, message: "لم يتم اختيار أي ملف." }, { status: 400 });
+    return apiError(400, "لم يتم اختيار أي ملف.");
   }
 
   if (files.length > MAX_FILES_PER_REQUEST) {
-    return NextResponse.json(
-      { ok: false, message: `الحد الأقصى ${MAX_FILES_PER_REQUEST} ملفات في المرة الواحدة.` },
-      { status: 400 },
+    return apiError(400, `الحد الأقصى ${MAX_FILES_PER_REQUEST} ملفات في المرة الواحدة.`);
+  }
+
+  // ٢٠ ملفًا كل ١٠ دقائق للعنوان الواحد (الحدّ السابق كان ٢٠ طلبًا × ٥ ملفات = ١٠٠ ملف)
+  const filesLimit = rateLimit(
+    clientKey(request, "upload-files"),
+    { limit: 20, windowMs: 10 * 60 * 1000 },
+    files.length,
+  );
+  if (!filesLimit.allowed) {
+    logSecurityEvent("rate_limited", { scope: "upload-files", ip });
+    return apiError(
+      429,
+      "تجاوزت عدد الملفات المسموح رفعها. حاول بعد قليل.",
+      {},
+      { "Retry-After": String(filesLimit.retryAfter) },
     );
   }
 
@@ -54,10 +65,21 @@ export async function POST(request: Request) {
   const errors: { name: string; error: string }[] = [];
 
   for (const file of files) {
-    const result = await storeUpload(file, kind, "customer");
+    let result;
+    try {
+      result = await storeUpload(file, kind, "customer");
+    } catch (error) {
+      return internalError("upload", error, "تعذّر رفع الملفات. حاول مرة أخرى.");
+    }
 
     if ("error" in result) {
-      errors.push({ name: file.name, error: result.error });
+      logSecurityEvent("upload_rejected", {
+        scope: "public",
+        code: result.code,
+        size: file.size,
+        ip,
+      });
+      errors.push({ name: file.name.slice(0, 120), error: result.error });
       continue;
     }
 
@@ -80,7 +102,7 @@ export async function POST(request: Request) {
         });
       } catch (error) {
         // فشل التسجيل في المكتبة لا يمنع نجاح الرفع نفسه
-        console.error("[upload] تعذّر تسجيل الملف في مكتبة الصور:", error);
+        console.error("[upload] تعذّر تسجيل الملف في مكتبة الصور:", error instanceof Error ? error.message : "");
       }
     }
   }
@@ -91,6 +113,8 @@ export async function POST(request: Request) {
       { status: 422 },
     );
   }
+
+  logSecurityEvent("upload_stored", { scope: "public", count: stored.length, ip }, "info");
 
   return NextResponse.json({
     ok: true,

@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { apiError, guardJsonPost, honeypotTripped, internalError } from "@/lib/security/api";
 import { getQuoteFields, pickAnswer, validateAnswers } from "@/lib/quote-form";
 import { generateQuoteReference } from "@/lib/reference";
-import { fieldErrors, honeypot, saudiPhone } from "@/lib/validation";
+import { attachmentSchema, fieldErrors, honeypot, saudiPhone } from "@/lib/validation";
 
 /**
  * استقبال طلبات عروض الأسعار.
@@ -14,19 +14,13 @@ import { fieldErrors, honeypot, saudiPhone } from "@/lib/validation";
  * لوحة التحكم ثم يُتحقق منها مقابله — لا نثق بما يصل من المتصفّح حتى لو كان
  * النموذج هو من أرسله.
  *
- * ثلاث طبقات حماية قبل الكتابة في القاعدة:
- *   ١. تحديد معدّل حسب عنوان العميل.
- *   ٢. حقل فخّ مخفي (honeypot) يكشف الإرسال الآلي.
- *   ٣. تحقق كامل — للحقول الثابتة بـ Zod وللمخصّصة مقابل القالب.
+ * طبقات الحماية قبل الكتابة في القاعدة (الحارس في src/lib/security/api.ts):
+ *   ١. فحص الأصل + نوع المحتوى JSON + سقف لحجم الجسم.
+ *   ٢. تحديد معدّل حسب عنوان العميل.
+ *   ٣. حقل فخّ مخفي (honeypot) يكشف الإرسال الآلي.
+ *   ٤. تحقق كامل — للحقول الثابتة بـ Zod وللمخصّصة مقابل القالب، وروابط المرفقات
+ *      لا تُقبل إلا بشكل ما يولّده مسار الرفع (لا javascript: ولا روابط خارجية).
  */
-
-const attachment = z.object({
-  kind: z.enum(["DESIGN", "LOGO", "REFERENCE"]).default("REFERENCE"),
-  name: z.string().trim().min(1).max(255),
-  url: z.string().trim().min(1).max(500),
-  size: z.number().int().nonnegative(),
-  mimeType: z.string().trim().max(120),
-});
 
 const coreSchema = z.object({
   customerName: z.string().trim().min(2, "الاسم قصير جدًا").max(80),
@@ -38,8 +32,15 @@ const coreSchema = z.object({
     .min(10, "اكتب وصفًا للطلب لا يقل عن ١٠ أحرف")
     .max(2000, "الوصف طويل جدًا"),
   productSlug: z.string().trim().max(120).optional().or(z.literal("").transform(() => undefined)),
-  answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])).default({}),
-  attachments: z.array(attachment).max(10).optional(),
+  // الإجابات المخصّصة: حدود على عدد المفاتيح وأطوالها (الجسم نفسه محدود بـ ٦٤ك)
+  answers: z
+    .record(
+      z.string().max(64),
+      z.union([z.string().max(2000), z.array(z.string().max(300)).max(60)]),
+    )
+    .refine((value) => Object.keys(value).length <= 60, "عدد الإجابات كبير جدًا")
+    .default({}),
+  attachments: z.array(attachmentSchema).max(10).optional(),
   acceptTerms: z
     .union([z.literal("on"), z.literal("true"), z.boolean()])
     .refine((value) => value === true || value === "on" || value === "true", {
@@ -48,61 +49,37 @@ const coreSchema = z.object({
   website: honeypot,
 });
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
-  const limit = rateLimit(clientKey(request, "quote"), {
+  const guard = await guardJsonPost(request, {
+    scope: "quote",
     limit: 5,
     windowMs: 10 * 60 * 1000,
+    maxBytes: 64 * 1024,
+    rateLimitMessage: "أرسلت عدة طلبات خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى.",
   });
+  if (!guard.ok) return guard.response;
 
-  if (!limit.allowed) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "أرسلت عدة طلبات خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى.",
-      },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
+  // الحقل الفخّ ممتلئ: نردّ بنجاح ظاهري حتى لا يعرف الروبوت أنه كُشف
+  if (honeypotTripped(guard.payload, request, "quote")) {
+    return NextResponse.json({ ok: true, reference: "—" });
   }
 
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json(
-      { ok: false, message: "صيغة الطلب غير صحيحة." },
-      { status: 400 },
-    );
-  }
-
-  const parsed = coreSchema.safeParse(payload);
+  const parsed = coreSchema.safeParse(guard.payload);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "تحقّق من الحقول المطلوبة.",
-        errors: fieldErrors(parsed.error),
-      },
-      { status: 422 },
-    );
+    return apiError(422, "تحقّق من الحقول المطلوبة.", { errors: fieldErrors(parsed.error) });
   }
 
   const data = parsed.data;
-
-  // الحقل الفخّ ممتلئ: نردّ بنجاح ظاهري حتى لا يعرف الروبوت أنه كُشف
-  if (data.website) {
-    return NextResponse.json({ ok: true, reference: "—" });
-  }
 
   // التحقق من الحقول المخصّصة مقابل القالب المحفوظ في القاعدة
   const fields = await getQuoteFields();
   const validated = validateAnswers(fields, data.answers);
 
   if (!validated.ok) {
-    return NextResponse.json(
-      { ok: false, message: "تحقّق من الحقول المطلوبة.", errors: validated.errors },
-      { status: 422 },
-    );
+    return apiError(422, "تحقّق من الحقول المطلوبة.", { errors: validated.errors });
   }
 
   const answers = validated.answers;
@@ -140,13 +117,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, reference });
   } catch (error) {
-    console.error("[quote] فشل حفظ طلب عرض السعر:", error);
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "تعذّر حفظ الطلب. حاول مرة أخرى أو تواصل معنا عبر واتساب.",
-      },
-      { status: 500 },
+    return internalError(
+      "quote",
+      error,
+      "تعذّر حفظ الطلب. حاول مرة أخرى أو تواصل معنا عبر واتساب.",
     );
   }
 }
