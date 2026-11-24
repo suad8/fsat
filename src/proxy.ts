@@ -169,6 +169,15 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // كل شيء عدا الأصول الثابتة (لا تحتاج فحصًا وتُغني عن كلفة التنفيذ)
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|brand/|uploads/).*)"],
+  /*
+   * كل شيء عدا الأصول الثابتة (لا تحتاج فحصًا وتُغني عن كلفة التنفيذ).
+   *
+   * مساران يُستثنيان عمدًا: مساري الرفع. الـ proxy يخزّن جسم كل طلب في الذاكرة
+   * ويقتطعه بصمت عند proxyClientMaxBodySize (١٠ ميجابايت افتراضيًا) فيُفسد ملفات
+   * التصميم الأكبر منه. المساران يطبّقان بأنفسهم فحص الأصل (guardMultipartPost)
+   * والجلسة العميقة (requireAdmin) وسقف الحجم أثناء القراءة، فلا يُفقد أي حماية.
+   */
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|brand/|uploads/|api/upload$|api/admin/upload$).*)",
+  ],
 };

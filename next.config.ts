@@ -71,7 +71,6 @@ const nextConfig: NextConfig = {
               "geolocation=()",
               "payment=()",
               "usb=()",
-              "bluetooth=()",
               "serial=()",
               "midi=()",
               "accelerometer=()",

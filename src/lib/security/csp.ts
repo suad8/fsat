@@ -68,4 +68,4 @@ export function adminCsp(nonce: string): string {
 }
 
 /** سياسة استجابات الـ API: لا تُعرض كصفحات أبدًا. */
-export const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
+export const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; sandbox";
