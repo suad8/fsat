@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ClosingCta } from "@/components/pages/ClosingCta";
+import { MediaFrame } from "@/components/pages/MediaFrame";
+import { PageSection } from "@/components/pages/PageSection";
 import { ProjectCard } from "@/components/portfolio/ProjectCard";
-import { ButtonLink } from "@/components/ui/Button";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+import { ButtonLink } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Section, SectionHeading } from "@/components/ui/Section";
-import { SmartImage } from "@/components/ui/SmartImage";
 import { PROJECT_IMAGE_STAGE_LABELS, type ProjectImageStage } from "@/lib/constants";
 import { getProjectBySlug, getProjects } from "@/lib/queries";
 import { breadcrumbJsonLd, creativeWorkJsonLd, JsonLd } from "@/lib/seo";
@@ -50,9 +51,15 @@ export default async function ProjectPage({ params }: { params: Params }) {
 
   if (!project) notFound();
 
-  const related = (await getProjects({ categorySlug: project.category.slug, limit: 4 })).filter(
-    (item) => item.slug !== project.slug,
-  );
+  // مشاريع مشابهة: من نفس القسم أولاً، ثم نكمل من بقية الأعمال
+  const [sameCategory, everything] = await Promise.all([
+    getProjects({ categorySlug: project.category.slug, limit: 6 }),
+    getProjects({ limit: 9 }),
+  ]);
+  const similar = [...sameCategory, ...everything]
+    .filter((item) => item.slug !== project.slug)
+    .filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index)
+    .slice(0, 3);
 
   const crumbs = [
     { label: "معرض الأعمال", href: "/portfolio" },
@@ -77,6 +84,8 @@ export default async function ProjectPage({ params }: { params: Params }) {
     },
   ].filter((spec) => Boolean(spec.value));
 
+  const quoteHref = `/quote?type=${encodeURIComponent(project.category.name)}&ref=${encodeURIComponent(project.title)}`;
+
   return (
     <>
       <JsonLd
@@ -98,203 +107,212 @@ export default async function ProjectPage({ params }: { params: Params }) {
         </div>
       </div>
 
-      <div className="container-page py-8 md:py-12">
-        <div className="grid gap-10 lg:grid-cols-3 lg:gap-12">
-          {/* --- الصور --- */}
-          <div className="lg:col-span-2">
-            <div className="grid gap-4">
-              {mainImages.length === 0 ? (
-                <SmartImage
-                  src={null}
-                  alt={project.title}
-                  ratio="4/3"
-                  icon="image"
-                  placeholderLabel={project.title}
-                  className="rounded-xl"
-                />
-              ) : (
-                mainImages.map((image, index) => (
-                  <figure key={image.id}>
-                    <SmartImage
-                      src={image.url}
-                      alt={image.alt}
-                      ratio="auto"
-                      icon="image"
-                      priority={index === 0}
-                      className="aspect-4/3 rounded-xl"
-                      sizes="(max-width: 1024px) 100vw, 66vw"
-                    />
-                    {image.caption ? (
-                      <figcaption className="text-primary-500 mt-2 text-sm">
-                        {image.caption}
-                      </figcaption>
-                    ) : null}
-                  </figure>
-                ))
-              )}
+      <section className="bg-surface py-10 md:py-16">
+        <div className="container-page">
+          <div className="grid gap-10 lg:grid-cols-3 lg:gap-14">
+            {/* --- الصور --- */}
+            <div className="lg:col-span-2">
+              <div className="grid gap-4">
+                {mainImages.length === 0 ? (
+                  <MediaFrame
+                    src={null}
+                    alt={project.title}
+                    icon="image"
+                    ratio="4/3"
+                    className="rounded-3xl"
+                  />
+                ) : (
+                  mainImages.map((image, index) => (
+                    <figure key={image.id}>
+                      <MediaFrame
+                        src={image.url}
+                        alt={image.alt}
+                        icon="image"
+                        ratio="4/3"
+                        priority={index === 0}
+                        className="border-border shadow-card rounded-3xl border"
+                        sizes="(max-width: 1024px) 100vw, 66vw"
+                      />
+                      {image.caption ? (
+                        <figcaption className="text-primary-500 mt-2 text-sm">
+                          {image.caption}
+                        </figcaption>
+                      ) : null}
+                    </figure>
+                  ))
+                )}
+              </div>
+
+              {byStage.BEFORE.length > 0 || byStage.AFTER.length > 0 ? (
+                <div className="mt-12">
+                  <h2 className="mb-4 text-xl font-black">قبل وبعد</h2>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {(["BEFORE", "AFTER"] as const).map((stage) =>
+                      byStage[stage].map((image) => (
+                        <figure key={image.id}>
+                          <MediaFrame
+                            src={image.url}
+                            alt={image.alt}
+                            icon="image"
+                            ratio="4/3"
+                            className="rounded-2xl"
+                          />
+                          <figcaption className="text-primary-600 mt-2 text-sm font-bold">
+                            {PROJECT_IMAGE_STAGE_LABELS[stage]}
+                            {image.caption ? (
+                              <span className="text-primary-500 font-normal">
+                                {" "}
+                                — {image.caption}
+                              </span>
+                            ) : null}
+                          </figcaption>
+                        </figure>
+                      )),
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {byStage.PROCESS.length > 0 ? (
+                <div className="mt-12">
+                  <h2 className="mb-4 text-xl font-black">مراحل التنفيذ</h2>
+                  <ol className="grid gap-4 sm:grid-cols-3">
+                    {byStage.PROCESS.map((image, index) => (
+                      <li key={image.id}>
+                        <figure>
+                          <MediaFrame
+                            src={image.url}
+                            alt={image.alt}
+                            icon="settings"
+                            ratio="square"
+                            className="rounded-2xl"
+                          />
+                          <figcaption className="text-primary-600 mt-2 text-xs">
+                            <span className="text-primary-950 font-bold">
+                              المرحلة {index + 1}
+                            </span>
+                            {image.caption ? ` — ${image.caption}` : ""}
+                          </figcaption>
+                        </figure>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ) : null}
             </div>
 
-            {/* --- قبل وبعد --- */}
-            {byStage.BEFORE.length > 0 || byStage.AFTER.length > 0 ? (
-              <div className="mt-10">
-                <h2 className="mb-4 text-lg font-bold">قبل وبعد</h2>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {(["BEFORE", "AFTER"] as const).map((stage) =>
-                    byStage[stage].map((image) => (
-                      <figure key={image.id}>
-                        <SmartImage
-                          src={image.url}
-                          alt={image.alt}
-                          ratio="4/3"
-                          icon="image"
-                          className="rounded-xl"
-                        />
-                        <figcaption className="text-primary-600 mt-2 text-sm font-bold">
-                          {PROJECT_IMAGE_STAGE_LABELS[stage]}
-                          {image.caption ? (
-                            <span className="text-primary-500 font-normal">
-                              {" "}
-                              — {image.caption}
-                            </span>
-                          ) : null}
-                        </figcaption>
-                      </figure>
-                    )),
-                  )}
-                </div>
-              </div>
-            ) : null}
+            {/* --- التفاصيل --- */}
+            <aside className="lg:col-span-1">
+              <div className="lg:sticky lg:top-28">
+                <Link
+                  href={`/portfolio?category=${project.category.slug}`}
+                  className="text-accent-700 hover:text-accent-800 mb-3 inline-flex items-center gap-2 text-sm font-bold transition-colors"
+                >
+                  <span aria-hidden="true" className="bg-accent-500 h-0.5 w-6 rounded-full" />
+                  {project.category.name}
+                </Link>
 
-            {/* --- مراحل التنفيذ --- */}
-            {byStage.PROCESS.length > 0 ? (
-              <div className="mt-10">
-                <h2 className="mb-4 text-lg font-bold">مراحل التنفيذ</h2>
-                <ol className="grid gap-4 sm:grid-cols-3">
-                  {byStage.PROCESS.map((image, index) => (
-                    <li key={image.id}>
-                      <figure>
-                        <SmartImage
-                          src={image.url}
-                          alt={image.alt}
-                          ratio="square"
-                          icon="settings"
-                          className="rounded-xl"
-                        />
-                        <figcaption className="text-primary-600 mt-2 text-xs">
-                          <span className="text-primary-950 font-bold">
-                            المرحلة {index + 1}
-                          </span>
-                          {image.caption ? ` — ${image.caption}` : ""}
-                        </figcaption>
-                      </figure>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-          </div>
+                <h1 className="text-[clamp(1.8rem,3vw,2.5rem)] leading-[1.15] font-black">
+                  {project.title}
+                </h1>
 
-          {/* --- التفاصيل --- */}
-          <aside className="lg:col-span-1">
-            <div className="sticky top-24">
-              <Link
-                href={`/portfolio?category=${project.category.slug}`}
-                className="text-accent-700 hover:text-accent-800 mb-2.5 inline-block text-xs font-bold transition-colors"
-              >
-                {project.category.name}
-              </Link>
+                {project.summary ? (
+                  <p className="text-primary-600 mt-4 text-lg leading-relaxed">{project.summary}</p>
+                ) : null}
 
-              <h1 className="text-2xl md:text-3xl">{project.title}</h1>
+                {project.description ? (
+                  <p className="text-primary-700 mt-4 leading-[1.9] whitespace-pre-line">
+                    {project.description}
+                  </p>
+                ) : null}
 
-              {project.summary ? (
-                <p className="text-primary-600 mt-4 leading-relaxed">{project.summary}</p>
-              ) : null}
-
-              {project.description ? (
-                <p className="text-primary-700 mt-4 leading-[1.9] whitespace-pre-line">
-                  {project.description}
-                </p>
-              ) : null}
-
-              {specs.length > 0 ? (
-                <dl className="border-border mt-7 space-y-4 border-t pt-6">
-                  {specs.map((spec) => (
-                    <div key={spec.label} className="flex gap-3">
-                      <span
-                        aria-hidden="true"
-                        className="bg-surface-sunken text-primary-500 grid size-9 shrink-0 place-items-center rounded-lg"
-                      >
-                        <Icon name={spec.icon} className="size-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <dt className="text-primary-500 text-xs">{spec.label}</dt>
-                        <dd className="text-primary-900 mt-0.5 text-sm font-medium">
-                          {spec.value}
-                        </dd>
+                {specs.length > 0 ? (
+                  <dl className="border-border mt-7 space-y-4 border-t pt-6">
+                    {specs.map((spec) => (
+                      <div key={spec.label} className="flex gap-3">
+                        <span
+                          aria-hidden="true"
+                          className="bg-surface-sunken text-primary-600 grid size-9 shrink-0 place-items-center rounded-lg"
+                        >
+                          <Icon name={spec.icon} className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <dt className="text-primary-500 text-xs">{spec.label}</dt>
+                          <dd className="text-primary-900 mt-0.5 text-sm font-bold">
+                            {spec.value}
+                          </dd>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
+                    ))}
+                  </dl>
+                ) : null}
 
-              <div className="mt-8 grid gap-2.5">
-                <ButtonLink
-                  href={`/quote?type=${encodeURIComponent(project.category.name)}&ref=${encodeURIComponent(project.title)}`}
-                  size="lg"
-                  fullWidth
-                  icon="document"
-                >
-                  اطلب مشروعًا مشابهًا
-                </ButtonLink>
+                <div className="mt-8 grid gap-2.5">
+                  <ButtonLink href={quoteHref} size="lg" variant="accent" fullWidth icon="document">
+                    اطلب مشروعًا مشابهًا
+                  </ButtonLink>
 
-                <ButtonLink
-                  href={whatsappProjectUrl(project.title, `/portfolio/${project.slug}`)}
-                  external
-                  size="lg"
-                  variant="whatsapp"
-                  icon="whatsapp"
-                  fullWidth
-                >
-                  استفسر عبر واتساب
-                </ButtonLink>
-
-                {project.relatedProduct ? (
                   <ButtonLink
-                    href={`/shop/${project.relatedProduct.category.slug}/${project.relatedProduct.slug}`}
-                    size="md"
-                    variant="outline"
+                    href={whatsappProjectUrl(project.title, `/portfolio/${project.slug}`)}
+                    external
+                    size="lg"
+                    variant="whatsapp"
+                    icon="whatsapp"
                     fullWidth
                   >
-                    اطلب {project.relatedProduct.name} من المتجر
+                    استفسر عبر واتساب
                   </ButtonLink>
-                ) : null}
-              </div>
-            </div>
-          </aside>
-        </div>
-      </div>
 
-      {related.length > 0 ? (
-        <Section tone="muted">
-          <SectionHeading
-            align="start"
-            title={`أعمال أخرى في ${project.category.name}`}
-            className="mb-8"
-            action={
-              <ButtonLink href="/portfolio" variant="outline" iconAfter="arrowLeft">
-                كل الأعمال
-              </ButtonLink>
-            }
-          />
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {related.slice(0, 3).map((item) => (
+                  {project.relatedProduct ? (
+                    <ButtonLink
+                      href={`/shop/${project.relatedProduct.category.slug}/${project.relatedProduct.slug}`}
+                      size="md"
+                      variant="outline"
+                      fullWidth
+                    >
+                      اطلب {project.relatedProduct.name} من المتجر
+                    </ButtonLink>
+                  ) : null}
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      {similar.length > 0 ? (
+        <PageSection
+          tone="muted"
+          eyebrow="مشاريع مشابهة"
+          headingId="similar-title"
+          title="أعمال أخرى قد تعجبك"
+          action={
+            <ButtonLink href="/portfolio" variant="outline" iconAfter="arrowLeft">
+              كل الأعمال
+            </ButtonLink>
+          }
+        >
+          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {similar.map((item) => (
               <li key={item.id}>
                 <ProjectCard project={item} />
               </li>
             ))}
           </ul>
-        </Section>
+        </PageSection>
       ) : null}
+
+      <ClosingCta
+        title="أعجبك هذا العمل؟ نكرّره لك"
+        description="أخبرنا بالمقاس والكمية وما تريد تغييره، ويصلك عرض سعر خلال يوم عمل."
+        primary={{ label: "اطلب مشروعًا مشابهًا", href: quoteHref, icon: "document" }}
+        secondary={{
+          label: "واتساب",
+          href: whatsappProjectUrl(project.title, `/portfolio/${project.slug}`),
+          icon: "whatsapp",
+          external: true,
+        }}
+      />
     </>
   );
 }
