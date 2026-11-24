@@ -124,3 +124,10 @@ export function messageReplyWhatsApp(message: { name: string; subject: string | 
     SIGN,
   ].join("\n");
 }
+
+export function quoteWhatsAppUrl(
+  phone: string,
+  quote: Parameters<typeof quoteWhatsAppMessage>[0],
+): string {
+  return waLink(phone, quoteWhatsAppMessage(quote));
+}
