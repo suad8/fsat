@@ -10,8 +10,8 @@ import { prisma } from "@/lib/prisma";
  *  آليتان:
  *    ١. علامة نصية «[[يحتاج استبدال]]» داخل النص (الإعدادات القديمة والصفحات).
  *       stripPlaceholders تزيلها قبل العرض للزائر.
- *    ٢. عمود needsReview على Product / Page / ShippingZone: إشارة للإدارة فقط،
- *       يُصفَّر عند حفظ الإدارة للسجل.
+ *    ٢. عمود needsReview على Product / Page / ShippingZone / Equipment / Faq:
+ *       إشارة للإدارة فقط، يُصفَّر عند حفظ الإدارة للسجل.
  *
  *  getReviewReport تجمع الاثنين لعرض «ما يحتاج استبدالاً قبل الإطلاق» في لوحة
  *  الإدارة (المحور 2).
@@ -56,16 +56,27 @@ export type ReviewItem = {
 };
 
 export async function getReviewReport(): Promise<ReviewItem[]> {
-  const [settings, products, pages, zones, pendingTestimonials, projects, activeProducts] =
-    await Promise.all([
-      prisma.siteSettings.findUnique({ where: { id: "singleton" } }),
-      prisma.product.count({ where: { needsReview: true } }),
-      prisma.page.count({ where: { needsReview: true } }),
-      prisma.shippingZone.count({ where: { needsReview: true } }),
-      prisma.testimonial.count({ where: { isApproved: false } }),
-      prisma.project.count({ where: { isActive: true } }),
-      prisma.product.count({ where: { isActive: true } }),
-    ]);
+  const [
+    settings,
+    products,
+    pages,
+    zones,
+    equipment,
+    faqs,
+    approvedTestimonials,
+    projects,
+    activeProducts,
+  ] = await Promise.all([
+    prisma.siteSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.product.count({ where: { needsReview: true } }),
+    prisma.page.count({ where: { needsReview: true } }),
+    prisma.shippingZone.count({ where: { needsReview: true } }),
+    prisma.equipment.count({ where: { needsReview: true } }),
+    prisma.faq.count({ where: { needsReview: true } }),
+    prisma.testimonial.count({ where: { isApproved: true } }),
+    prisma.project.count({ where: { isActive: true } }),
+    prisma.product.count({ where: { isActive: true } }),
+  ]);
 
   const items: ReviewItem[] = [];
   const missing = (value: string | null | undefined) => !value?.trim() || hasPlaceholder(value);
@@ -141,11 +152,29 @@ export async function getReviewReport(): Promise<ReviewItem[]> {
       severity: "blocker",
     });
   }
-  if (pendingTestimonials > 0) {
+  if (equipment > 0) {
+    items.push({
+      key: "equipment",
+      label: "مواصفات معدات نموذجية تحتاج مطابقتها مع معداتكم",
+      count: equipment,
+      href: "/admin/equipment",
+      severity: "recommended",
+    });
+  }
+  if (faqs > 0) {
+    items.push({
+      key: "faq",
+      label: "أسئلة شائعة تذكر مددًا وسياسات تنتظر مراجعتكم",
+      count: faqs,
+      href: "/admin/faq",
+      severity: "recommended",
+    });
+  }
+  if (approvedTestimonials === 0) {
     items.push({
       key: "testimonials",
-      label: "تقييمات غير معتمدة (لا تظهر للزوّار)",
-      count: pendingTestimonials,
+      label: "لا توجد آراء عملاء معتمدة — أضف رأيًا حقيقيًا ليظهر القسم",
+      count: null,
       href: "/admin/testimonials",
       severity: "recommended",
     });

@@ -8,6 +8,7 @@ import { ADMIN_ROLES } from "@/lib/constants";
 import { getAdminContext, type AdminContext } from "@/lib/data/admin-context";
 import { diffRecords, logAudit } from "@/lib/data/audit";
 import { MAX_MONEY, roundMoney } from "@/lib/data/money";
+import { checkAdminPassword } from "@/lib/data/password-policy";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 
@@ -219,7 +220,7 @@ function validateResourceRules(
 }
 
 /** الموارد التي تحمل علامة "بيانات مبدئية" تُصفَّر عند حفظ الإدارة لها. */
-const REVIEWABLE_MODELS = new Set(["page", "shippingZone"]);
+const REVIEWABLE_MODELS = new Set(["page", "shippingZone", "equipment", "faq"]);
 
 /** صفحات تعتمد عليها روابط الموقع (التذييل) — تُخفى ولا تُحذف. */
 const PROTECTED_PAGE_SLUGS = new Set(["privacy", "terms", "returns", "shipping"]);
@@ -364,11 +365,13 @@ export async function saveResourceAction(
 
     const password = form.get("password");
     if (typeof password === "string" && password.length > 0) {
-      if (password.length < 10) {
-        return { fieldErrors: { password: "كلمة المرور يجب ألا تقل عن ١٠ أحرف" } };
-      }
-      if (password.length > 200) {
-        return { fieldErrors: { password: "كلمة المرور طويلة جدًا" } };
+      // سياسة الإنتاج تُطبَّق دائمًا على حسابات اللوحة (≥ ١٢ حرفًا، ٣ أنواع)
+      const strength = checkAdminPassword(password, {
+        email: typeof data.email === "string" ? data.email : undefined,
+        production: true,
+      });
+      if (!strength.ok) {
+        return { fieldErrors: { password: strength.reasons.join(" ") } };
       }
       data.passwordHash = await hashPassword(password);
     } else if (!editingId) {

@@ -546,6 +546,9 @@ model Equipment {
   isActive    Boolean @default(true)
   order       Int     @default(0)
 
+  /// مواصفات مبدئية تنتظر مطابقتها مع معدات المنشأة الفعلية — للإدارة فقط
+  needsReview Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -583,6 +586,9 @@ model Faq {
   category String?
   order    Int     @default(0)
   isActive Boolean @default(true)
+
+  /// إجابة مبدئية تتضمّن التزامات (مدد/سياسات) تنتظر مراجعتك — للإدارة فقط
+  needsReview Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

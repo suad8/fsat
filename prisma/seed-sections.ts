@@ -9,15 +9,8 @@
 
 import "dotenv/config";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-
-import { PrismaClient } from "../src/generated/prisma/client";
-
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
-  }),
-});
+import type { PrismaClient } from "../src/generated/prisma/client";
+import { createPrismaClient } from "../src/lib/data/create-client";
 
 const SECTIONS = [
   { key: "products", isActive: true },
@@ -29,7 +22,8 @@ const SECTIONS = [
   { key: "contact", isActive: true },
 ];
 
-async function main() {
+/** يُستدعى من prisma/seed.ts، ويعمل مستقلاً كذلك (انظر أسفل الملف). */
+export async function seedSections(prisma: PrismaClient) {
   for (const [index, section] of SECTIONS.entries()) {
     await prisma.homeSection.upsert({
       where: { key: section.key },
@@ -39,14 +33,18 @@ async function main() {
   }
 
   const total = await prisma.homeSection.count();
-  console.log(`✔ أقسام الصفحة الرئيسية: ${total}`);
+  console.log(`  • أقسام الصفحة الرئيسية: ${total}`);
 }
 
-main()
-  .catch((error) => {
-    console.error("✖ فشلت التهيئة:", error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// التشغيل المباشر فقط — الاستيراد من seed.ts لا يشغّل شيئًا
+if (require.main === module) {
+  const prisma = createPrismaClient();
+  seedSections(prisma)
+    .catch((error) => {
+      console.error("✖ فشلت التهيئة:", error);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

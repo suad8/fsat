@@ -6,9 +6,14 @@
  *  أسعارها، الخدمات، تصنيفات معرض الأعمال، المعدات، الأسئلة الشائعة،
  *  الصفحات، مناطق الشحن، وحساب المدير.
  *
- *  ⚠️  الأسعار وبيانات التواصل هنا قيم هيكلية معلّمة بـ [[يحتاج استبدال]]
- *      ريثما تصل قائمة الأسعار الحقيقية وملف الهوية. الهيكل صحيح ونهائي،
- *      والقيم وحدها هي ما يتغيّر — من لوحة التحكم ودون لمس الكود.
+ *  مبادئ البيانات الأولية (المحور 3):
+ *    • لا شيء وهميّ يظهر للعميل: لا أرقام تواصل ولا بريد ولا عنوان ولا
+ *      تقييمات مختلقة. ما لم نعرفه يُترك فارغًا فتتولاه لوحة الإدارة.
+ *    • الأسعار والمدد والسياسات والمعدات المبدئية تُعلَّم `needsReview` —
+ *      إشارة تراها الإدارة فقط (تقرير getReviewReport) وتزول عند حفظها.
+ *    • حساب الإدارة من ADMIN_EMAIL / ADMIN_PASSWORD. في الإنتاج يُرفض غيابهما،
+ *      والبريد التجريبي، وكلمة المرور الضعيفة أو الافتراضية.
+ *    • السكربت متكرّر التشغيل بأمان: لا يعدّل ما أنشأته الإدارة.
  *
  *  التشغيل:  npm run db:seed
  * ============================================================================
@@ -16,21 +21,28 @@
 
 import "dotenv/config";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { randomBytes } from "node:crypto";
+
 import { hash } from "bcryptjs";
 
-import { PrismaClient } from "../src/generated/prisma/client";
+import { createPrismaClient } from "../src/lib/data/create-client";
+import {
+  checkAdminPassword,
+  isPlaceholderEmail,
+} from "../src/lib/data/password-policy";
+import { seedQuoteFields } from "./seed-quote-fields";
+import { seedSections } from "./seed-sections";
 
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
-  }),
-});
+const prisma = createPrismaClient();
 
-const NEEDS = "[[يحتاج استبدال]]";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 async function main() {
   console.log("▶ بدء تهيئة البيانات الأولية…");
+
+  // نتحقق من إعداد حساب الإدارة أولاً: خطأ في الإنتاج يوقف التهيئة قبل أن
+  // تُكتب أي بيانات، فلا تبقى قاعدة نصف مهيّأة.
+  const adminPlan = await planAdmin();
 
   await seedSettings();
   const categories = await seedCategories();
@@ -42,7 +54,9 @@ async function main() {
   await seedTestimonials();
   await seedPages();
   await seedShipping();
-  await seedAdmin();
+  await seedSections(prisma);
+  await seedQuoteFields(prisma);
+  await seedAdmin(adminPlan);
 
   console.log("✔ اكتملت التهيئة.");
 }
@@ -61,15 +75,18 @@ async function seedSettings() {
       tagline: "نحوّل أفكارك إلى مطبوعات ومنتجات دعائية بين يديك",
       description:
         "مصنع متكامل للطباعة والتجهيزات الدعائية يقدّم حلول الطباعة كاملة تحت سقف واحد: البوكسات والتغليف، الأكواب، المطبوعات الورقية، الاستيكرات، طباعة UV، الأكريليك، اللوحات الإعلانية والمضيئة، الفلكس والبنرات، الطباعة على الملابس، والهدايا الدعائية.",
-      phone: `+966500000000 ${NEEDS}`,
-      whatsapp: `966500000000 ${NEEDS}`,
-      email: `info@example.com ${NEEDS}`,
-      addressLine: NEEDS,
+      // بيانات التواصل والعنوان والرقم الضريبي تُترك فارغة عمدًا: لا نضع رقمًا
+      // وهميًا يصل إليه العميل. تظهر في تقرير المراجعة وتُملأ من
+      // /admin/settings قبل الإطلاق.
+      phone: null,
+      whatsapp: null,
+      email: null,
+      addressLine: null,
       city: "الرياض",
       workingHours: "السبت – الخميس: ٩ صباحًا – ٩ مساءً",
       social: {},
-      vatNumber: "",
-      crNumber: "",
+      vatNumber: null,
+      crNumber: null,
       vatRate: 0.15,
       pricesIncludeVat: true,
       paymentSettings: {
@@ -965,6 +982,8 @@ async function seedProducts(categories: Map<string, string>) {
         leadTime: product.leadTime,
         isFeatured: product.isFeatured ?? false,
         order: index,
+        // الأسعار هيكلية حتى تعتمد الإدارة قائمتها الفعلية
+        needsReview: product.priceMode !== "QUOTE_ONLY",
         seoTitle: `${product.name} | طلب وطباعة أونلاين`,
         seoDescription: product.shortDescription,
         quantityTiers: {
@@ -1237,9 +1256,7 @@ async function seedProjectCategories() {
     });
   }
   console.log(`  • ${PROJECT_CATEGORIES.length} تصنيف لمعرض الأعمال`);
-  console.log(
-    `    ↳ لم تُضَف مشاريع — معرض الأعمال ينتظر صور أعمالكم الحقيقية ${NEEDS}`,
-  );
+  console.log("    ↳ لم تُضَف مشاريع — معرض الأعمال ينتظر صور أعمالكم الحقيقية");
 }
 
 // ---------------------------------------------------------------------------
@@ -1317,6 +1334,8 @@ async function seedEquipment() {
         description: item.description,
         specs: item.specs,
         order: index,
+        // مواصفات نموذجية — تُطابَق مع معدات المنشأة الفعلية
+        needsReview: true,
       },
     });
   }
@@ -1413,6 +1432,8 @@ async function seedFaqs() {
         answer: faq.answer,
         category: faq.category,
         order: index,
+        // الإجابات تذكر مددًا وسياسات تلتزم بها المنشأة
+        needsReview: true,
       },
     });
   }
@@ -1420,34 +1441,13 @@ async function seedFaqs() {
 }
 
 // ---------------------------------------------------------------------------
-// تقييمات العملاء — قوالب غير معتمدة، لا تظهر في الموقع
+// تقييمات العملاء — لا تُنشأ هنا
 // ---------------------------------------------------------------------------
+//  آراء العملاء لا تُختلق ولو كقوالب مخفية. القسم يظهر في الموقع حين تُدخل
+//  الإدارة رأيًا حقيقيًا وتعتمده من /admin/testimonials.
 
 async function seedTestimonials() {
-  const count = await prisma.testimonial.count();
-  if (count > 0) return;
-
-  const templates = [
-    { authorName: `اسم العميل ${NEEDS}`, companyName: `اسم المنشأة ${NEEDS}`, city: "الرياض" },
-    { authorName: `اسم العميل ${NEEDS}`, companyName: `اسم المنشأة ${NEEDS}`, city: "جدة" },
-    { authorName: `اسم العميل ${NEEDS}`, companyName: `اسم المنشأة ${NEEDS}`, city: "الدمام" },
-  ];
-
-  for (const [index, template] of templates.entries()) {
-    await prisma.testimonial.create({
-      data: {
-        authorName: template.authorName,
-        companyName: template.companyName,
-        city: template.city,
-        rating: 5,
-        content: `نص التقييم الحقيقي للعميل ${NEEDS} — استبدل هذا النص برأي عميل فعلي ثم اعتمد التقييم ليظهر في الموقع.`,
-        isApproved: false,
-        order: index,
-      },
-    });
-  }
-
-  console.log("  • ٣ قوالب تقييمات (غير معتمدة — لا تظهر في الموقع حتى تُستبدل وتُعتمد)");
+  console.log("  • التقييمات: لا شيء — تُضاف من الإدارة عند توفّر آراء حقيقية");
 }
 
 // ---------------------------------------------------------------------------
@@ -1458,9 +1458,7 @@ const PAGES = [
   {
     slug: "privacy",
     title: "سياسة الخصوصية",
-    content: `> ⚠️ هذه مسوّدة مهنية تحتاج مراجعة قانونية قبل النشر ${NEEDS}
-
-## البيانات التي نجمعها
+    content: `## البيانات التي نجمعها
 
 نجمع البيانات التي تزوّدنا بها مباشرة عند إرسال طلب أو طلب عرض سعر أو التواصل معنا، وتشمل: الاسم، رقم الجوال، البريد الإلكتروني، اسم المنشأة، المدينة وعنوان التوصيل، وملفات التصاميم التي ترفعها.
 
@@ -1504,9 +1502,7 @@ const PAGES = [
   {
     slug: "terms",
     title: "الشروط والأحكام",
-    content: `> ⚠️ هذه مسوّدة مهنية تحتاج مراجعة قانونية قبل النشر ${NEEDS}
-
-## نطاق الخدمة
+    content: `## نطاق الخدمة
 
 نقدّم خدمات الطباعة والتجهيزات الدعائية داخل المملكة العربية السعودية، وتشمل التصميم والتصنيع والطباعة والتركيب حسب نوع المنتج.
 
@@ -1552,9 +1548,7 @@ const PAGES = [
   {
     slug: "returns",
     title: "سياسة الاستبدال والاسترجاع",
-    content: `> ⚠️ هذه مسوّدة مهنية تحتاج مراجعة قانونية قبل النشر ${NEEDS}
-
-## طبيعة المنتجات المطبوعة
+    content: `## طبيعة المنتجات المطبوعة
 
 جميع منتجاتنا تُصنَّع حسب طلب العميل وبمواصفاته وتصميمه، ولا يمكن إعادة بيعها لعميل آخر. لذلك، ووفقًا لنظام التجارة الإلكترونية السعودي الذي يستثني السلع المصنوعة حسب الطلب من حق الانسحاب، لا تقبل هذه المنتجات الاسترجاع لمجرد تغيير الرأي.
 
@@ -1592,9 +1586,7 @@ const PAGES = [
   {
     slug: "shipping",
     title: "سياسة الشحن والتوصيل",
-    content: `> ⚠️ راجع تكاليف الشحن ومدده وفق اتفاقك مع شركة الشحن ${NEEDS}
-
-## خيارات الاستلام
+    content: `## خيارات الاستلام
 
 ### الاستلام من الفرع
 يمكنك استلام طلبك مباشرة من مقرّنا دون أي رسوم. نرسل لك رسالة عند جاهزية الطلب مع العنوان وأوقات الاستلام.
@@ -1643,10 +1635,12 @@ async function seedPages() {
         content: page.content,
         seoTitle: page.title,
         seoDescription: `${page.title} — اطّلع على التفاصيل الكاملة.`,
+        // مسوّدة مهنية تحتاج مراجعة قانونية قبل الاعتماد
+        needsReview: true,
       },
     });
   }
-  console.log(`  • ${PAGES.length} صفحات سياسات (مسوّدات تحتاج مراجعة قانونية)`);
+  console.log(`  • ${PAGES.length} صفحات سياسات (معلَّمة للمراجعة القانونية في الإدارة)`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1682,39 +1676,89 @@ async function seedShipping() {
   ];
 
   for (const [index, zone] of zones.entries()) {
-    await prisma.shippingZone.create({ data: { ...zone, order: index } });
+    // التكاليف مبدئية حتى يُحسم الاتفاق مع شركة الشحن
+    await prisma.shippingZone.create({ data: { ...zone, order: index, needsReview: true } });
   }
-  console.log(`  • ${zones.length} مناطق شحن ${NEEDS} (راجع التكاليف)`);
+  console.log(`  • ${zones.length} مناطق شحن (التكاليف مبدئية ومعلَّمة للمراجعة)`);
 }
 
 // ---------------------------------------------------------------------------
 // حساب المدير
 // ---------------------------------------------------------------------------
 
-async function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL ?? "admin@example.com";
-  const password = process.env.ADMIN_PASSWORD ?? "ChangeMe!2026";
+/**
+ * ينشئ المالك الأول من متغيّرات البيئة. لا توجد كلمة مرور مكتوبة في الكود.
+ *
+ *  • الإنتاج: ADMIN_EMAIL وADMIN_PASSWORD إلزاميان، والبريد غير تجريبي،
+ *    وكلمة المرور تجتاز سياسة الإنتاج (≥ ١٢ حرفًا، ٣ أنواع، غير شائعة).
+ *    أي مخالفة توقف التهيئة بخطأ واضح — لا يُنشأ حساب ضعيف أبدًا.
+ *  • التطوير: غياب كلمة المرور يولّد كلمة عشوائية تُطبع مرة واحدة.
+ *  • الحساب الموجود لا يُعدَّل (تغيير كلمة المرور من لوحة الإدارة).
+ */
+type AdminPlan = { email: string; password: string; generated: boolean } | null;
 
-  const existing = await prisma.adminUser.findUnique({ where: { email } });
-  if (existing) {
-    console.log(`  • حساب المدير موجود مسبقًا (${email})`);
+async function planAdmin(): Promise<AdminPlan> {
+  // أول تشغيل فقط: بعد وجود أي حساب لا ننشئ ولا نعدّل شيئًا (تغيير كلمة
+  // المرور أو إضافة مستخدمين من لوحة الإدارة)
+  const existingCount = await prisma.adminUser.count();
+  if (existingCount > 0) return null;
+
+  const email = (process.env.ADMIN_EMAIL ?? (IS_PRODUCTION ? "" : "admin@example.com"))
+    .trim()
+    .toLowerCase();
+  const providedPassword = process.env.ADMIN_PASSWORD;
+
+  const errors: string[] = [];
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push("ADMIN_EMAIL مطلوب بصيغة بريد صحيحة.");
+  } else if (IS_PRODUCTION && isPlaceholderEmail(email)) {
+    errors.push(`ADMIN_EMAIL (${email}) بريد تجريبي لا يصلح للإنتاج.`);
+  }
+
+  if (IS_PRODUCTION && !providedPassword) {
+    errors.push("ADMIN_PASSWORD مطلوب في الإنتاج.");
+  }
+
+  if (providedPassword) {
+    const check = checkAdminPassword(providedPassword, { email, production: IS_PRODUCTION });
+    if (!check.ok) {
+      errors.push(...check.reasons.map((reason) => `ADMIN_PASSWORD: ${reason}`));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`تعذّر إنشاء حساب الإدارة:\n  - ${errors.join("\n  - ")}`);
+  }
+
+  const generated = !providedPassword;
+  return {
+    email,
+    password: providedPassword ?? randomBytes(12).toString("base64url"),
+    generated,
+  };
+}
+
+async function seedAdmin(plan: AdminPlan) {
+  if (!plan) {
+    console.log("  • حسابات الإدارة موجودة مسبقًا — لم يُعدَّل شيء");
     return;
   }
 
   await prisma.adminUser.create({
     data: {
-      email,
-      passwordHash: await hash(password, 12),
+      email: plan.email,
+      passwordHash: await hash(plan.password, 12),
       name: "مدير النظام",
       role: "OWNER",
     },
   });
 
   console.log("  • حساب المدير");
-  console.log(`    ↳ البريد: ${email}`);
-  if (!process.env.ADMIN_PASSWORD) {
-    console.log(`    ↳ كلمة المرور: ${password}`);
-    console.log("    ⚠️  غيّرها فورًا بعد أول دخول، أو اضبط ADMIN_PASSWORD في .env قبل التهيئة.");
+  console.log(`    ↳ البريد: ${plan.email}`);
+  if (plan.generated) {
+    console.log(`    ↳ كلمة مرور مؤقتة (تُعرض مرة واحدة): ${plan.password}`);
+    console.log("    ⚠️  غيّرها فورًا بعد أول دخول، أو اضبط ADMIN_PASSWORD قبل التهيئة.");
   }
 }
 
