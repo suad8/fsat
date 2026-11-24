@@ -81,7 +81,7 @@ export function AdminCard({
   return (
     <section
       id={id}
-      className={cn("border-border bg-surface rounded-xl border shadow-sm", className)}
+      className={cn("border-border bg-surface min-w-0 rounded-xl border shadow-sm", className)}
     >
       {title ? (
         <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5 sm:px-5">

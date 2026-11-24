@@ -124,7 +124,7 @@ export default async function AdminDashboard() {
         <h2 id="revenue" className="sr-only">
           الإيراد
         </h2>
-        <div className="border-border bg-surface grid divide-y rounded-xl border shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0 rtl:sm:divide-x-reverse">
+        <div className="border-border bg-surface grid rounded-xl border shadow-sm sm:grid-cols-3">
           <RevenueTile label="اليوم" amount={data.revenue.today} orders={data.revenue.todayOrders} />
           <RevenueTile label="هذا الأسبوع" amount={data.revenue.week} orders={data.revenue.weekOrders} note="من السبت" />
           <RevenueTile
@@ -451,7 +451,7 @@ function RevenueTile({
   note?: string;
 }) {
   return (
-    <div className="px-4 py-4 sm:px-5">
+    <div className="border-border border-t px-4 py-4 first:border-t-0 sm:border-t-0 sm:border-s sm:px-5 sm:first:border-s-0">
       <p className="text-primary-600 text-xs font-bold">{label}</p>
       <p className="font-display text-primary-950 mt-1 text-2xl font-extrabold tabular-nums">
         <CountUp value={Math.round(amount)} kind="price" />

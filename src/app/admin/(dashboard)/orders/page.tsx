@@ -228,7 +228,7 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
                     <Td>
                       <Link
                         href={`/admin/orders/${order.id}`}
-                        className="text-accent-700 hover:text-accent-800 font-mono text-xs font-bold hover:underline"
+                        className="text-accent-700 hover:text-accent-800 font-mono text-xs font-bold whitespace-nowrap hover:underline"
                         dir="ltr"
                       >
                         {order.orderNumber}
