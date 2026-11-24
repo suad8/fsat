@@ -8,6 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { useCart } from "@/components/cart/CartProvider";
 import { ButtonLink, IconButton } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { HeaderSearch } from "@/components/site/HeaderSearch";
 import { Logo } from "@/components/site/Logo";
 import { contact } from "@/config/brand";
 import { mainNav } from "@/config/nav";
@@ -50,6 +51,15 @@ export function Header({ categories }: HeaderProps) {
     menuOpenRef.current = menuOpen;
   }, [menuOpen]);
 
+  // لوحة البحث المفتوحة تُبقي الترويسة ظاهرة (لا تختفي مع التمرير)
+  const searchOpenRef = useRef(false);
+  const handleSearchOpen = useCallback((open: boolean) => {
+    searchOpenRef.current = open;
+    if (open && headerRef.current) {
+      gsap.to(headerRef.current, { top: 0, duration: 0.25, overwrite: true });
+    }
+  }, []);
+
   /*
    * يختفي الهيدر عند التمرير للأسفل ويعود عند التمرير للأعلى (GSAP).
    * يُحرَّك `top` لا `transform`: أي transform على الهيدر يجعله حاضنًا
@@ -65,7 +75,7 @@ export function Header({ categories }: HeaderProps) {
           start: 140,
           end: "max",
           onUpdate: (self) => {
-            if (menuOpenRef.current) return;
+            if (menuOpenRef.current || searchOpenRef.current) return;
             gsap.to(el, {
               top: self.direction === 1 ? -el.offsetHeight : 0,
               duration: 0.4,
@@ -133,10 +143,19 @@ export function Header({ categories }: HeaderProps) {
             </a>
           </div>
 
-          <span className="inline-flex items-center gap-1.5">
-            <Icon name="clock" className="size-3.5" strokeWidth={1.8} />
-            {contact.workingHours}
-          </span>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/track"
+              className="hover:text-accent-300 inline-flex items-center gap-1.5 font-bold transition-colors"
+            >
+              <Icon name="package" className="size-3.5" strokeWidth={1.8} />
+              تتبّع طلبك
+            </Link>
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="clock" className="size-3.5" strokeWidth={1.8} />
+              {contact.workingHours}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -148,6 +167,7 @@ export function Header({ categories }: HeaderProps) {
           <DesktopNav categories={categories} isActive={isActive} />
 
           <div className="flex items-center gap-1.5 md:gap-2">
+            <HeaderSearch onOpenChange={handleSearchOpen} />
             <CartButton />
 
             <ButtonLink
@@ -163,7 +183,7 @@ export function Header({ categories }: HeaderProps) {
               name={menuOpen ? "close" : "menu"}
               label={menuOpen ? "إغلاق القائمة" : "فتح القائمة"}
               variant="outline"
-              size="sm"
+              size="md"
               className="border-white/20 bg-transparent text-white hover:border-white/50 hover:bg-white/10 hover:text-white lg:hidden"
               aria-expanded={menuOpen}
               aria-controls="mobile-menu"
@@ -271,7 +291,7 @@ function CartButton() {
       aria-label={
         hydrated && itemCount > 0 ? `السلة، ${itemCount} منتج` : "السلة"
       }
-      className="text-primary-100 focus-visible:outline-accent-500 relative grid size-9 border-white/20 hover:border-white/50 hover:bg-white/10 place-items-center rounded-xl border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 md:size-11"
+      className="text-primary-100 focus-visible:outline-accent-500 relative grid size-11 border-white/20 hover:border-white/50 hover:bg-white/10 place-items-center rounded-xl border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <Icon name="cart" className="size-5" />
 
@@ -368,7 +388,20 @@ function MobileMenu({
             </div>
           ) : null}
 
-          <div className="mt-5 grid gap-2.5 border-t border-white/10 pt-5">
+          <div className="mt-5 border-t border-white/10 pt-3">
+            <Link
+              href="/track"
+              className="text-primary-100 flex min-h-12 items-center justify-between rounded-lg px-4 text-[0.95rem] font-bold transition-colors hover:bg-white/10"
+            >
+              <span className="flex items-center gap-2.5">
+                <Icon name="package" className="size-4.5" />
+                تتبّع طلبك
+              </span>
+              <Icon name="chevronLeft" className="text-primary-400 size-4" />
+            </Link>
+          </div>
+
+          <div className="mt-2 grid gap-2.5 border-t border-white/10 pt-5">
             <ButtonLink href="/quote" variant="accent" fullWidth>
               طلب عرض سعر
             </ButtonLink>

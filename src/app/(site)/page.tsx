@@ -18,11 +18,11 @@ import { Section, SectionHeading } from "@/components/ui/Section";
 import {
   getApprovedTestimonials,
   getCategories,
-  getFeaturedProducts,
   getProducts,
   getProjects,
   getServices,
 } from "@/lib/queries";
+import { getPopularProducts } from "@/lib/shop/popular";
 import { getQuoteFields } from "@/lib/quote-form";
 import { organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { getSettings } from "@/lib/settings";
@@ -36,29 +36,35 @@ import { cn } from "@/lib/utils";
  * الإدارة من /admin/theme — لا من ترتيب ثابت في الكود.
  */
 export default async function HomePage() {
+  // إعدادات الأقسام أولًا: لا نجلب بيانات قسم أوقفته الإدارة (لا تحمّل ما لا يظهر)
+  const sectionRows = await getHomeSections();
+  const cfg = (key: string) => sectionConfig(sectionRows, key);
+
   const [
     settings,
     services,
-    products,
+    popular,
     allProducts,
     projects,
     testimonials,
     quoteFields,
     categories,
-    sectionRows,
   ] = await Promise.all([
     getSettings(),
     getServices(),
-    getFeaturedProducts(8),
+    getPopularProducts(8),
     getProducts(),
     getProjects({ limit: 6 }),
-    getApprovedTestimonials(6),
-    getQuoteFields(),
+    cfg("testimonials").active
+      ? getApprovedTestimonials(6)
+      : Promise.resolve([] as Awaited<ReturnType<typeof getApprovedTestimonials>>),
+    cfg("contact").active
+      ? getQuoteFields()
+      : Promise.resolve([] as Awaited<ReturnType<typeof getQuoteFields>>),
     getCategories(),
-    getHomeSections(),
   ]);
 
-  const cfg = (key: string) => sectionConfig(sectionRows, key);
+  const products = popular.products;
 
   // كل قسم يُبنى مرة واحدة ثم تُرتَّب القائمة حسب إعدادات الإدارة
   const sections: { order: number; node: React.ReactNode }[] = [];
@@ -75,10 +81,15 @@ export default async function HomePage() {
       <SectionHeading
         align="start"
         eyebrow={cfg("products").eyebrow ?? "المتجر"}
-        title={cfg("products").title ?? "المنتجات الأكثر طلبًا"}
+        title={
+          cfg("products").title ??
+          (popular.fromOrders ? "الأكثر طلبًا من عملائنا" : "منتجات مختارة لك")
+        }
         description={
           cfg("products").description ??
-          "أسعار واضحة تنخفض كلما زادت الكمية، وخيارات تحدّدها بنفسك قبل الطلب."
+          (popular.fromOrders
+            ? "المنتجات التي طلبها عملاؤنا أكثر خلال الأشهر الأخيرة — بأسعار واضحة وخيارات تحدّدها بنفسك."
+            : "أسعار واضحة تنخفض كلما زادت الكمية، وخيارات تحدّدها بنفسك قبل الطلب.")
         }
         action={
           <ButtonLink href="/shop" variant="outline" iconAfter="arrowLeft">

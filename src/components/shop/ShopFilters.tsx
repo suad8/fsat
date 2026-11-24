@@ -10,10 +10,16 @@ import { gsap, MOTION_OK } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 
 const SORT_OPTIONS = [
-  { value: "featured", label: "الأكثر طلبًا" },
+  { value: "featured", label: "المميّز أولًا" },
   { value: "priceAsc", label: "السعر: من الأقل" },
   { value: "priceDesc", label: "السعر: من الأعلى" },
   { value: "newest", label: "الأحدث" },
+] as const;
+
+const MODE_OPTIONS = [
+  { value: "", label: "الكل" },
+  { value: "direct", label: "شراء مباشر بسعر معروض" },
+  { value: "quote", label: "بعرض سعر" },
 ] as const;
 
 /**
@@ -37,6 +43,8 @@ export function ShopFilters({
 
   const currentSort = searchParams.get("sort") ?? "featured";
   const currentSearch = searchParams.get("q") ?? "";
+  const currentMode = searchParams.get("mode") ?? "";
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
    * مزامنة حقل البحث عند تغيّر الرابط من الخارج (زر الرجوع مثلاً).
@@ -75,6 +83,7 @@ export function ShopFilters({
           role="search"
           onSubmit={(event) => {
             event.preventDefault();
+            if (typingTimer.current) clearTimeout(typingTimer.current);
             updateParam("q", searchValue.trim() || null);
           }}
           className="relative flex-1"
@@ -88,15 +97,24 @@ export function ShopFilters({
           */}
           <Icon
             name="search"
-            className="text-primary-400 pointer-events-none absolute inset-y-0 start-3.5 my-auto size-4.5"
+            className="text-primary-400 pointer-events-none absolute inset-y-0 start-4 my-auto size-5"
           />
           <input
             id="shop-search"
             type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
             value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
-            placeholder="ابحث عن منتج…"
-            className="border-border-strong bg-surface text-primary-900 placeholder:text-primary-400 hover:border-primary-400 focus-visible:outline-accent-600 w-full rounded-lg border py-2.5 ps-11 pe-4 text-sm transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-1"
+            onChange={(event) => {
+              const next = event.target.value;
+              setSearchValue(next);
+              // بحث فوري: يُنفَّذ بعد توقف الكتابة لحظة
+              if (typingTimer.current) clearTimeout(typingTimer.current);
+              typingTimer.current = setTimeout(() => updateParam("q", next.trim() || null), 450);
+            }}
+            placeholder="ابحث عن منتج: كوب، بوكس، كروت…"
+            className="border-border-strong bg-surface text-primary-900 placeholder:text-primary-400 hover:border-primary-400 h-12 w-full rounded-xl border ps-12 pe-4 text-base transition-[border-color,box-shadow] focus:outline-none focus-visible:border-accent-600 focus-visible:ring-2 focus-visible:ring-accent-500/50"
           />
         </form>
 
@@ -104,12 +122,12 @@ export function ShopFilters({
           <label htmlFor="shop-sort" className="text-primary-600 shrink-0 text-sm">
             ترتيب حسب
           </label>
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none">
             <select
               id="shop-sort"
               value={currentSort}
               onChange={(event) => updateParam("sort", event.target.value)}
-              className="border-border-strong bg-surface text-primary-900 hover:border-primary-400 focus-visible:outline-accent-600 appearance-none rounded-lg border py-2.5 ps-4 pe-10 text-sm font-medium transition-colors focus:outline-none focus-visible:outline-2"
+              className="border-border-strong bg-surface text-primary-900 hover:border-primary-400 h-12 w-full appearance-none rounded-xl border ps-4 pe-10 text-base font-medium transition-[border-color,box-shadow] focus:outline-none focus-visible:border-accent-600 focus-visible:ring-2 focus-visible:ring-accent-500/50"
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -119,10 +137,34 @@ export function ShopFilters({
             </select>
             <Icon
               name="chevronDown"
-              className="text-primary-400 pointer-events-none absolute inset-y-0 left-3 my-auto size-4"
+              className="text-primary-400 pointer-events-none absolute inset-y-0 end-3 my-auto size-4"
             />
           </div>
         </div>
+      </div>
+
+      {/* نوع التسعير */}
+      <div role="group" aria-label="نوع الطلب" className="flex flex-wrap gap-2">
+        {MODE_OPTIONS.map((option) => {
+          const active = currentMode === option.value;
+          return (
+            <button
+              key={option.value || "all"}
+              type="button"
+              aria-pressed={active}
+              onClick={() => updateParam("mode", option.value || null)}
+              className={cn(
+                "inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-bold transition-colors",
+                "focus-visible:outline-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2",
+                active
+                  ? "border-primary-950 bg-primary-950 text-white"
+                  : "border-border-strong bg-surface text-primary-700 hover:border-primary-400",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* عدد النتائج ومسح الفلاتر */}
@@ -139,10 +181,10 @@ export function ShopFilters({
           ) : null}
         </p>
 
-        {currentSearch || currentSort !== "featured" || activeCategory ? (
+        {currentSearch || currentSort !== "featured" || currentMode || activeCategory ? (
           <Link
             href="/shop"
-            className="text-accent-700 hover:text-accent-800 inline-flex items-center gap-1 text-sm font-bold transition-colors"
+            className="text-accent-800 hover:text-accent-900 inline-flex min-h-11 items-center gap-1 text-sm font-bold transition-colors"
           >
             <Icon name="close" className="size-3.5" strokeWidth={2.5} />
             مسح الفلاتر
@@ -158,6 +200,8 @@ function buildHref(base: string, params: URLSearchParams): string {
   const kept = new URLSearchParams();
   const q = params.get("q");
   const sort = params.get("sort");
+  const mode = params.get("mode");
+  if (mode) kept.set("mode", mode);
   if (q) kept.set("q", q);
   if (sort && sort !== "featured") kept.set("sort", sort);
   const query = kept.toString();

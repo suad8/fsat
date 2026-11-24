@@ -53,6 +53,7 @@ export function QuickAddButton({
         size="sm"
         icon={state === "added" ? "check" : "cart"}
         fullWidth
+        className="min-h-11"
         aria-label={`أضف ${productName} إلى السلة`}
       >
         {pending ? "جارٍ الإضافة…" : state === "added" ? "تمت الإضافة" : "أضف للسلة"}

@@ -65,7 +65,7 @@ export function ProductCard({
             tone="dark"
             className="absolute top-2 right-2 px-2 py-0.5 text-[0.6rem] shadow-sm md:top-3 md:right-3 md:px-2.5 md:py-1 md:text-xs"
           >
-            الأكثر طلبًا
+            مميّز
           </Badge>
         ) : null}
       </Link>
@@ -116,12 +116,15 @@ export function ProductCard({
             {isQuoteOnly || product.startingPrice === null ? (
               <QuoteOnlyLabel className="text-xs md:text-sm" />
             ) : (
-              <Price
-                value={product.startingPrice}
-                size="md"
-                startsFrom={product.priceMode === "STARTS_FROM"}
-                compareAt={product.compareAtPrice}
-              />
+              <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                <Price
+                  value={product.startingPrice}
+                  size="md"
+                  startsFrom={product.priceMode === "STARTS_FROM"}
+                  compareAt={product.compareAtPrice}
+                />
+                <span className="text-primary-500 text-[0.7rem]">/ {product.unit}</span>
+              </span>
             )}
           </div>
 
@@ -131,7 +134,7 @@ export function ProductCard({
                 href={`/quote?product=${encodeURIComponent(product.slug)}`}
                 variant="primary"
                 size="sm"
-                className="min-w-0 flex-1 px-2 text-xs md:px-3.5 md:text-sm"
+                className="min-h-11 min-w-0 flex-1 px-2 text-xs md:px-3.5 md:text-sm"
               >
                 عرض سعر
               </ButtonLink>
@@ -152,7 +155,7 @@ export function ProductCard({
               rel="noopener noreferrer"
               aria-label={`اطلب ${product.name} عبر واتساب`}
               title="اطلب عبر واتساب"
-              className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#25D366] text-white transition-colors hover:bg-[#1EBE5A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1EBE5A]"
+              className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#25D366] text-white transition-colors hover:bg-[#1EBE5A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1EBE5A]"
             >
               <Icon name="whatsapp" className="size-4 md:size-[1.15rem]" />
             </a>

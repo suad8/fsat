@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ButtonLink } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
@@ -82,6 +84,16 @@ export function OrderPaths() {
           </Reveal>
         ))}
       </ul>
+
+      <p className="text-primary-600 mt-8 text-center text-sm">
+        طلبت من قبل؟{" "}
+        <Link
+          href="/track"
+          className="text-accent-800 hover:text-accent-900 inline-flex min-h-11 items-center font-bold underline underline-offset-4"
+        >
+          تتبّع طلبك برقمه وجوالك
+        </Link>
+      </p>
     </Section>
   );
 }

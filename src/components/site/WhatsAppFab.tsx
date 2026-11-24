@@ -14,7 +14,8 @@ import { whatsappGeneralUrl } from "@/lib/whatsapp";
  * على الشاشات الكبيرة يتوسّع عند مرور المؤشر أو التركيز بلوحة المفاتيح،
  * حيث توجد مساحة فارغة تكفي.
  *
- * يختفي في صفحات تفاصيل المنتج على الجوال، لأن الشريط السفلي الثابت هناك
+ * يختفي على الجوال في السلة والدفع (شريط الإجراء الثابت هناك) وفي صفحات
+ * تفاصيل المنتج، لأن الشريط السفلي الثابت هناك
  * يحمل زر واتساب برسالة معبّأة بمواصفات المنتج — وزرّان متجاوران أحدهما
  * أقل فائدة يشوّشان الاختيار.
  */
@@ -24,6 +25,9 @@ export function WhatsAppFab() {
   // /shop/[category]/[product] — ثلاثة أجزاء بعد الجذر
   const isProductPage =
     pathname.startsWith("/shop/") && pathname.split("/").filter(Boolean).length === 3;
+
+  // السلة والدفع: شريط الإجراء الثابت أسفل الجوال يحتل المكان، وصفحة الدفع فيها رابط مساعدة
+  const hasStickyBar = pathname === "/cart" || pathname.startsWith("/checkout");
 
   return (
     <a
@@ -38,7 +42,7 @@ export function WhatsAppFab() {
         "active:scale-95",
         // التوسّع على الشاشات الكبيرة فقط
         "md:hover:pe-5 md:focus-visible:pe-5",
-        isProductPage && "hidden md:inline-flex",
+        (isProductPage || hasStickyBar) && "hidden md:inline-flex",
       )}
       aria-label="تواصل معنا عبر واتساب"
     >

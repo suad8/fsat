@@ -9,11 +9,12 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Reveal } from "@/components/ui/Reveal";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getCategories, getCategoryBySlug, getProducts } from "@/lib/queries";
+import { applyShopFilters, normalizeMode, normalizeSort } from "@/lib/shop/catalog";
 import { breadcrumbJsonLd, JsonLd } from "@/lib/seo";
 import { truncate } from "@/lib/utils";
 
 type Params = Promise<{ category: string }>;
-type SearchParams = Promise<{ q?: string; sort?: string }>;
+type SearchParams = Promise<{ q?: string; sort?: string; mode?: string }>;
 
 export async function generateStaticParams() {
   const categories = await getCategories();
@@ -62,12 +63,14 @@ export default async function CategoryPage({
   if (!category) notFound();
 
   const sort = normalizeSort(query.sort);
-  const search = query.q?.trim() || undefined;
+  const mode = normalizeMode(query.mode);
+  const search = query.q?.trim().slice(0, 80) || undefined;
 
-  const [categories, products] = await Promise.all([
+  const [categories, all] = await Promise.all([
     getCategories(),
-    getProducts({ categorySlug: slug, search, sort }),
+    getProducts({ categorySlug: category.slug, sort }),
   ]);
+  const products = applyShopFilters(all, { search, mode, sort });
 
   const crumbs = [
     { label: "المتجر", href: "/shop" },
@@ -109,11 +112,11 @@ export default async function CategoryPage({
           <EmptyState
             icon="package"
             title={
-              search ? "لا توجد نتائج مطابقة في هذا القسم" : "لا توجد منتجات في هذا القسم بعد"
+              search || mode ? "لا توجد نتائج مطابقة في هذا القسم" : "لا توجد منتجات في هذا القسم بعد"
             }
             description={
-              search
-                ? "جرّب كلمة بحث أخرى، أو تصفّح بقية الأقسام."
+              search || mode
+                ? "جرّب كلمة بحث أخرى أو أزل الفلاتر، أو تصفّح بقية الأقسام."
                 : `ننفّذ طلبات ${category.name} حسب المواصفات. أرسل لنا ما تحتاجه وسنرسل لك عرض سعر خلال يوم عمل.`
             }
             action={
@@ -142,11 +145,4 @@ export default async function CategoryPage({
       </div>
     </>
   );
-}
-
-function normalizeSort(
-  value: string | undefined,
-): "featured" | "priceAsc" | "priceDesc" | "newest" {
-  if (value === "priceAsc" || value === "priceDesc" || value === "newest") return value;
-  return "featured";
 }
