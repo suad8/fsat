@@ -1703,10 +1703,10 @@ async function planAdmin(): Promise<AdminPlan> {
   const existingCount = await prisma.adminUser.count();
   if (existingCount > 0) return null;
 
-  const email = (process.env.ADMIN_EMAIL ?? (IS_PRODUCTION ? "" : "admin@example.com"))
+  const email = (process.env.ADMIN_EMAIL || (IS_PRODUCTION ? "" : "admin@example.com"))
     .trim()
     .toLowerCase();
-  const providedPassword = process.env.ADMIN_PASSWORD;
+  const providedPassword = process.env.ADMIN_PASSWORD || undefined;
 
   const errors: string[] = [];
 
