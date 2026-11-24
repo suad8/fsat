@@ -49,5 +49,10 @@ export function summarizeLeadTimes(values: (string | null | undefined)[]): strin
 
   const min = Math.min(...numbers);
   const max = Math.max(...numbers);
-  return min === max ? `${min} أيام عمل` : `${min} – ${max} يوم عمل`;
+  const result = min === max ? `${min} أيام عمل` : `${min} – ${max} يوم عمل`;
+
+  // نحافظ على نمط الأرقام الذي كتبته الإدارة (شرقية أو لاتينية) ليتّسق مع بطاقات المنتجات
+  return /[٠-٩]/.test(unique[0])
+    ? result.replace(/\d/g, (digit) => String.fromCharCode(0x0660 + Number(digit)))
+    : result;
 }

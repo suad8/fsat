@@ -50,7 +50,7 @@ export default async function PortfolioPage({
         breadcrumbs={[{ label: "معرض الأعمال", href: "/portfolio" }]}
         action={
           <ButtonLink href="/quote" variant="accent" size="lg" iconAfter="arrowLeft">
-            اطلب مشروعًا مشابهًا
+            {hasProjects ? "اطلب مشروعًا مشابهًا" : "اطلب عرض سعر"}
           </ButtonLink>
         }
       />

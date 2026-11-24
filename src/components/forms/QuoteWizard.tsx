@@ -38,7 +38,15 @@ type Values = Record<string, string | string[]>;
 
 type Files = { designs: UploadedFile[]; logos: UploadedFile[]; references: UploadedFile[] };
 
-type Draft = { v: 1; step: number; values: Values; files: Files; savedAt: number };
+type Draft = {
+  v: 1;
+  step: number;
+  values: Values;
+  files: Files;
+  savedAt: number;
+  /** توقيع قيم الرابط وقت الحفظ — يميّز إعادة تحميل نفس الزيارة عن فتح رابط جديد. */
+  sig: string;
+};
 
 export type QuoteWizardDefaults = {
   productType?: string;
@@ -153,16 +161,32 @@ function WizardInner({
     ...(defaults?.size ? { f_size: defaults.size } : {}),
     ...(defaults?.description ? { description: defaults.description } : {}),
   }));
+  const sig = JSON.stringify(prefill);
   const hasPrefill = Object.keys(prefill).length > 0;
 
-  const [restored] = useState<Draft | null>(() => (hasPrefill ? null : loadDraft()));
+  const [initial] = useState(() => {
+    const draft = loadDraft();
+    // نفس الزيارة (إعادة تحميل): نستعيد كل شيء كما تركه العميل.
+    // رابط جديد بقيم مختلفة: قيم الرابط تتقدّم ونبدأ من الخطوة الأولى.
+    const sameVisit = draft !== null && (draft.sig === sig || !hasPrefill);
+    return {
+      draft,
+      step: draft && sameVisit ? draft.step : 0,
+      values: sameVisit ? (draft?.values ?? {}) : { ...(draft?.values ?? {}), ...prefill },
+    };
+  });
+  const restored =
+    initial.draft &&
+    (initial.draft.step > 0 ||
+      Object.values(initial.draft.values).some((value) =>
+        Array.isArray(value) ? value.length > 0 : String(value).trim().length > 0,
+      ))
+      ? initial.draft
+      : null;
   const [dismissedRestore, setDismissedRestore] = useState(false);
 
-  const [step, setStep] = useState(restored?.step ?? 0);
-  const [values, setValues] = useState<Values>(() => ({
-    ...(restored?.values ?? {}),
-    ...prefill,
-  }));
+  const [step, setStep] = useState(initial.step);
+  const [values, setValues] = useState<Values>(initial.values);
   const [files, setFiles] = useState<Files>(restored?.files ?? EMPTY_FILES);
   const [accept, setAccept] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -181,8 +205,8 @@ function WizardInner({
   // --- حفظ المسودة عند كل تغيير ---
   useEffect(() => {
     if (status === "success") return;
-    saveDraft({ v: 1, step, values, files, savedAt: Date.now() });
-  }, [step, values, files, status]);
+    saveDraft({ v: 1, step, values, files, savedAt: Date.now(), sig });
+  }, [step, values, files, status, sig]);
 
   // --- حركة هادئة عند تبديل الخطوة + نقل التركيز إلى عنوانها ---
   useGSAP(
@@ -437,27 +461,6 @@ function WizardInner({
             </button>
           </div>
         ) : null}
-
-        <div className="border-border bg-surface-muted mx-auto mt-8 max-w-md rounded-2xl border p-5 text-start">
-          <h3 className="mb-4 text-sm font-black">ماذا يحدث الآن؟</h3>
-          <ol className="space-y-4">
-          {[
-            "نراجع طلبك وملفاتك فنيًا للتأكد من الخامة والمقاس.",
-            "يتواصل معك مختص بالطريقة التي اخترتها بعرض السعر والمدة (خلال يوم عمل).",
-            "تعتمد العرض فنبدأ التنفيذ ونبلغك عند الجاهزية.",
-          ].map((item, index) => (
-            <li key={item} className="flex gap-3 text-sm leading-relaxed">
-              <span
-                aria-hidden="true"
-                className="bg-ink text-accent-400 mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-xs font-black"
-              >
-                {index + 1}
-              </span>
-              <span className="text-primary-700">{item}</span>
-            </li>
-          ))}
-          </ol>
-        </div>
 
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           {hasRef ? (
@@ -822,6 +825,17 @@ function WizardInner({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * نص المساعدة المحفوظ في القالب قد يكون ملاحظة للإدارة لا للعميل
+ * (مثل «اترك الخيارات فارغة لتُملأ تلقائيًا…») — لا نعرضه للزائر.
+ */
+function publicHelp(field: QuoteField): string | undefined {
+  const help = field.helpText?.trim();
+  if (!help) return undefined;
+  if (/تُملأ تلقائيًا|تملأ تلقائيا|اترك .* فارغ/.test(help)) return undefined;
+  return help;
+}
+
 /** يرسم حقلاً واحدًا من قالب الإدارة كحقل مُتحكَّم به. */
 function FieldControl({
   field,
@@ -843,7 +857,7 @@ function FieldControl({
     label: field.label,
     required: field.isRequired,
     optional: !field.isRequired,
-    help: field.helpText ?? undefined,
+    help: publicHelp(field),
     error,
     placeholder: field.placeholder ?? undefined,
     wrapperClassName: span,
@@ -904,8 +918,8 @@ function FieldControl({
           ))}
         </div>
 
-        {field.helpText ? (
-          <p className="text-primary-500 mt-2 text-xs leading-relaxed">{field.helpText}</p>
+        {publicHelp(field) ? (
+          <p className="text-primary-500 mt-2 text-xs leading-relaxed">{publicHelp(field)}</p>
         ) : null}
         {error ? <p className="text-danger-600 mt-1.5 text-xs font-bold">{error}</p> : null}
       </fieldset>
