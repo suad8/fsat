@@ -103,18 +103,20 @@ async function loadOpenOrders(): Promise<OpenOrderLite[]> {
 }
 
 /** معرّفات الطلبات لفلاتر قائمة الطلبات الخاصة (راكد / بلا تصميم). */
-export async function getOrderIdsForFilter(filter: "stalled" | "nodesign"): Promise<string[]> {
+export async function getOrderFilterIds(): Promise<{ stalled: string[]; nodesign: string[] }> {
   const now = new Date();
   const open = await loadOpenOrders();
 
-  return open
-    .filter((order) =>
-      filter === "stalled"
-        ? isStalled(order, now)
-        : (DESIGN_PENDING_STATUSES as readonly string[]).includes(order.status) &&
+  return {
+    stalled: open.filter((order) => isStalled(order, now)).map((order) => order.id),
+    nodesign: open
+      .filter(
+        (order) =>
+          (DESIGN_PENDING_STATUSES as readonly string[]).includes(order.status) &&
           !hasDesignFile(order),
-    )
-    .map((order) => order.id);
+      )
+      .map((order) => order.id),
+  };
 }
 
 // ---------------------------------------------------------------------------

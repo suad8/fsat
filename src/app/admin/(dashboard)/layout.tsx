@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/AdminShell";
+import { getNavCounts } from "@/lib/admin/dashboard";
 import { ADMIN_ROLE_LABELS, type AdminRole } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -26,10 +27,13 @@ export default async function AdminDashboardLayout({
   const session = await getSession();
   if (!session) redirect("/admin/login");
 
-  const user = await prisma.adminUser.findUnique({
-    where: { id: session.id },
-    select: { id: true, name: true, email: true, role: true, isActive: true },
-  });
+  const [user, counts] = await Promise.all([
+    prisma.adminUser.findUnique({
+      where: { id: session.id },
+      select: { id: true, name: true, email: true, role: true, isActive: true },
+    }),
+    getNavCounts(),
+  ]);
 
   if (!user || !user.isActive) redirect("/admin/login");
 
@@ -40,6 +44,7 @@ export default async function AdminDashboardLayout({
         email: user.email,
         role: ADMIN_ROLE_LABELS[user.role as AdminRole] ?? user.role,
       }}
+      counts={counts}
     >
       {children}
     </AdminShell>
