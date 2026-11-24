@@ -1,14 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionState, useEffect, useRef } from "react";
 
 import {
   saveSeoDefaultsAction,
   type SettingsState,
 } from "@/app/admin/(dashboard)/actions/settings";
+import { useToast } from "@/components/admin/Feedback";
+import { SaveBar, useSaveShortcut } from "@/components/admin/FormKit";
 import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
 import { TextArea, TextInput } from "@/components/ui/Field";
 
 /** تحرير العنوان والوصف الافتراضيين لمحركات البحث. */
@@ -23,18 +23,21 @@ export function SeoDefaultsForm({
     saveSeoDefaultsAction,
     {},
   );
+  const toast = useToast();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.ok) toast.success("تم حفظ الإعدادات الافتراضية");
+    if (state.error) toast.error("تعذّر الحفظ", state.error);
+  }, [state, toast]);
+
+  useSaveShortcut(() => formRef.current?.requestSubmit());
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form ref={formRef} action={formAction} className="space-y-5">
       {state.error ? (
         <Alert tone="danger" live>
           {state.error}
-        </Alert>
-      ) : null}
-
-      {state.ok ? (
-        <Alert tone="success" live>
-          تم حفظ الإعدادات.
         </Alert>
       ) : null}
 
@@ -59,17 +62,7 @@ export function SeoDefaultsForm({
         help="يظهر تحت العنوان في نتائج البحث. يُفضّل ١٥٠ – ١٦٠ حرفًا."
       />
 
-      <SubmitButton />
+      <SaveBar inline submit saveLabel="حفظ" />
     </form>
-  );
-}
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button type="submit" disabled={pending} icon={pending ? undefined : "check"}>
-      {pending ? "جارٍ الحفظ…" : "حفظ"}
-    </Button>
   );
 }

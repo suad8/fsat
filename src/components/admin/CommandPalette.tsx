@@ -198,7 +198,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
         aria-label="البحث السريع"
         className="adm-pop bg-surface border-border relative flex max-h-[min(34rem,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
       >
-        <div className="border-border flex items-center gap-3 border-b px-4">
+        <div className="adm-palette-input border-border flex items-center gap-3 border-b px-4">
           <AdminIcon name="search" className="text-primary-400 size-5" />
           <input
             ref={inputRef}

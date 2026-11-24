@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { deleteMediaAction } from "@/app/admin/(dashboard)/actions/media";
+import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminEmpty } from "@/components/admin/AdminUi";
-import { Alert } from "@/components/ui/Alert";
-import { Icon } from "@/components/ui/Icon";
-import { formatDate, formatFileSize } from "@/lib/utils";
+import { useConfirm, useToast } from "@/components/admin/Feedback";
+import { cn, formatDate, formatFileSize } from "@/lib/utils";
 
 export type MediaItem = {
   id: string;
@@ -34,16 +34,20 @@ const FOLDER_LABELS: Record<string, string> = {
 /** مكتبة الصور — رفع، معاينة، نسخ الرابط، وحذف. */
 export function MediaLibrary({ items }: { items: MediaItem[] }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [folder, setFolder] = useState<string>("all");
 
-  async function upload(files: FileList | null) {
+  const folders = Array.from(new Set(items.map((item) => item.folder)));
+  const visible = folder === "all" ? items : items.filter((item) => item.folder === folder);
+
+  async function upload(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
 
     setUploading(true);
-    setError(null);
 
     try {
       const body = new FormData();
@@ -51,60 +55,73 @@ export function MediaLibrary({ items }: { items: MediaItem[] }) {
       body.append("folder", "uploads");
 
       const response = await fetch("/api/admin/upload", { method: "POST", body });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
       if (!response.ok || !result.ok) {
-        setError(result.message ?? "تعذّر رفع الصور.");
+        toast.error("تعذّر رفع الصور", result.message);
         return;
       }
 
+      toast.success(`رُفعت ${Array.from(files).length} صورة`);
       router.refresh();
     } catch {
-      setError("تعذّر الاتصال بالخادم أثناء الرفع.");
+      toast.error("تعذّر الاتصال بالخادم أثناء الرفع");
     } finally {
       setUploading(false);
     }
   }
 
-  function remove(item: MediaItem) {
-    if (!confirm(`هل تريد حذف «${item.originalName}»؟`)) return;
+  async function remove(item: MediaItem) {
+    const ok = await confirm({
+      title: `حذف «${item.originalName}»؟`,
+      description: "إن كانت الصورة مستخدمة في منتج أو عمل فستختفي من هناك أيضًا.",
+      confirmLabel: "احذف",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     startTransition(async () => {
       const result = await deleteMediaAction(item.id);
       if (!result.ok) {
-        setError(result.error ?? "تعذّر الحذف.");
+        toast.error("تعذّر الحذف", result.error);
         return;
       }
-      setError(null);
+      toast.success("حُذفت الصورة");
       router.refresh();
     });
   }
 
   async function copy(url: string) {
     try {
-      await navigator.clipboard.writeText(url);
-      setCopied(url);
-      setTimeout(() => setCopied(null), 2000);
+      await navigator.clipboard.writeText(`${window.location.origin}${url}`);
+      toast.success("تم نسخ رابط الصورة");
     } catch {
-      setError("تعذّر نسخ الرابط. انسخه يدويًا من خصائص الصورة.");
+      toast.error("تعذّر نسخ الرابط", "انسخه يدويًا من خصائص الصورة.");
     }
   }
 
   return (
     <div className="space-y-5">
-      {error ? (
-        <Alert tone="danger" live>
-          {error}
-        </Alert>
-      ) : null}
-
       <label
         htmlFor="media-upload"
-        className="border-border-strong bg-surface hover:border-primary-400 block cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-colors"
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          void upload(event.dataTransfer.files);
+        }}
+        className={cn(
+          "bg-surface focus-within:outline-accent-600 block cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-colors focus-within:outline-2 focus-within:outline-offset-2",
+          dragging ? "border-accent-600 bg-accent-50" : "border-border-strong hover:border-primary-400",
+        )}
       >
-        <Icon name="upload" className="text-primary-400 mx-auto size-8" strokeWidth={1.4} />
+        <AdminIcon name="upload" className="text-primary-400 mx-auto size-8" strokeWidth={1.4} />
         <span className="text-primary-800 mt-2 block font-bold">
-          {uploading ? "جارٍ الرفع…" : "ارفع صورًا إلى المكتبة"}
+          {uploading ? "جارٍ الرفع…" : "اسحب الصور هنا أو اضغط لاختيارها"}
         </span>
         <span className="text-primary-500 mt-1 block text-xs">
           JPG أو PNG أو WEBP — تُحوَّل تلقائيًا إلى WebP وتُصغَّر إلى ٢٤٠٠ بكسل
@@ -120,6 +137,27 @@ export function MediaLibrary({ items }: { items: MediaItem[] }) {
         />
       </label>
 
+      {folders.length > 1 ? (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="تصفية حسب المجلد">
+          {["all", ...folders].map((key) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={folder === key}
+              onClick={() => setFolder(key)}
+              className={cn(
+                "min-h-9 rounded-full px-3.5 text-xs font-bold transition-colors",
+                folder === key
+                  ? "bg-primary-950 text-white"
+                  : "border-border bg-surface text-primary-700 hover:bg-surface-sunken border",
+              )}
+            >
+              {key === "all" ? "الكل" : (FOLDER_LABELS[key] ?? key)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {items.length === 0 ? (
         <AdminEmpty
           icon="image"
@@ -128,7 +166,7 @@ export function MediaLibrary({ items }: { items: MediaItem[] }) {
         />
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {items.map((item) => (
+          {visible.map((item) => (
             <li
               key={item.id}
               className={`border-border bg-surface overflow-hidden rounded-xl border shadow-sm transition-opacity ${
@@ -166,10 +204,10 @@ export function MediaLibrary({ items }: { items: MediaItem[] }) {
                 <div className="mt-2.5 flex gap-1">
                   <button
                     type="button"
-                    onClick={() => copy(item.url)}
+                    onClick={() => void copy(item.url)}
                     className="border-border text-primary-600 hover:bg-surface-muted flex-1 rounded-md border px-2 py-1.5 text-[0.7rem] font-bold transition-colors"
                   >
-                    {copied === item.url ? "تم النسخ" : "نسخ الرابط"}
+                    نسخ الرابط
                   </button>
 
                   <a
@@ -180,18 +218,18 @@ export function MediaLibrary({ items }: { items: MediaItem[] }) {
                     title="فتح الصورة"
                     className="border-border text-primary-500 hover:bg-surface-muted grid size-7 shrink-0 place-items-center rounded-md border transition-colors"
                   >
-                    <Icon name="externalLink" className="size-3.5" />
+                    <AdminIcon name="externalLink" className="size-3.5" />
                   </a>
 
                   <button
                     type="button"
-                    onClick={() => remove(item)}
+                    onClick={() => void remove(item)}
                     disabled={pending}
                     aria-label={`حذف ${item.originalName}`}
                     title="حذف"
                     className="border-border text-primary-500 hover:bg-danger-50 hover:text-danger-600 grid size-7 shrink-0 place-items-center rounded-md border transition-colors disabled:opacity-40"
                   >
-                    <Icon name="trash" className="size-3.5" />
+                    <AdminIcon name="trash" className="size-3.5" />
                   </button>
                 </div>
               </div>

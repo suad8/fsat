@@ -145,7 +145,10 @@ export function SaveBar({
   errorCount = 0,
   onShowErrors,
   extra,
+  inline = false,
 }: {
+  /** داخل بطاقة صغيرة: شريط عادي بلا التصاق ولا هوامش سالبة. */
+  inline?: boolean;
   pending?: boolean;
   /** undefined = لا نتتبّع التغييرات (الزر دائمًا فعّال). */
   dirty?: boolean;
@@ -165,8 +168,13 @@ export function SaveBar({
 
   return (
     <div
-      className="no-print border-border bg-surface/95 sticky z-20 -mx-4 mt-6 border-t px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
-      style={{ bottom: "var(--adm-bnav-h, 0px)" }}
+      className={cn(
+        "no-print border-border border-t",
+        inline
+          ? "mt-5 pt-4"
+          : "bg-surface/95 sticky z-20 -mx-4 mt-6 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8",
+      )}
+      style={inline ? undefined : { bottom: "var(--adm-bnav-h, 0px)" }}
     >
       <div className="mx-auto flex max-w-[var(--adm-max,90rem)] flex-wrap items-center gap-x-3 gap-y-2">
         <button

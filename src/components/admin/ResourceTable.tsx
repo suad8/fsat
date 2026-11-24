@@ -10,9 +10,9 @@ import {
   toggleResourceFieldAction,
 } from "@/app/admin/(dashboard)/actions/resource";
 import { AdminEmpty, AdminTable, Td, Th } from "@/components/admin/AdminUi";
-import { Alert } from "@/components/ui/Alert";
+import { AdminIcon } from "@/components/admin/AdminIcon";
+import { useConfirm, useToast } from "@/components/admin/Feedback";
 import { ButtonLink } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import type { ColumnDef } from "@/lib/admin/resources";
 import { formatDateTime, formatPriceWithCurrency } from "@/lib/utils";
 
@@ -40,19 +40,27 @@ export function ResourceTable({
   newHref: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
-  function handleDelete(id: string, label: string) {
-    if (!confirm(`هل تريد حذف «${label}»؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+  async function handleDelete(id: string, label: string) {
+    const ok = await confirm({
+      title: `حذف «${label}»؟`,
+      description: "لا يمكن التراجع عن هذا الإجراء.",
+      confirmLabel: "احذف",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     startTransition(async () => {
       const result = await deleteResourceAction(resourceSlug, id);
       if (!result.ok) {
-        setError(result.error ?? "تعذّر الحذف.");
+        toast.error("تعذّر الحذف", result.error);
         return;
       }
-      setError(null);
+      toast.success(`حُذف «${label}»`);
       router.refresh();
     });
   }
@@ -61,13 +69,22 @@ export function ResourceTable({
     startTransition(async () => {
       const result = await toggleResourceFieldAction(resourceSlug, id, field, next);
       if (!result.ok) {
-        setError(result.error ?? "تعذّر التحديث.");
+        toast.error("تعذّر التحديث", result.error);
         return;
       }
-      setError(null);
+      toast.success(next ? "تم التفعيل" : "تم الإيقاف");
       router.refresh();
     });
   }
+
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? rows.filter((row) =>
+        Object.values(row).some(
+          (value) => typeof value === "string" && value.toLowerCase().includes(needle),
+        ),
+      )
+    : rows;
 
   if (rows.length === 0) {
     return (
@@ -85,14 +102,35 @@ export function ResourceTable({
 
   return (
     <>
-      {error ? (
-        <div className="p-4">
-          <Alert tone="danger" live>
-            {error}
-          </Alert>
+      {rows.length > 6 ? (
+        <div className="border-border border-b p-3">
+          <label htmlFor="resource-filter" className="sr-only">
+            بحث في القائمة
+          </label>
+          <div className="relative max-w-sm">
+            <AdminIcon
+              name="search"
+              className="text-primary-400 pointer-events-none absolute inset-y-0 start-3 my-auto size-4"
+            />
+            <input
+              id="resource-filter"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="ابحث في القائمة…"
+              autoComplete="off"
+              className="border-border-strong bg-surface text-primary-900 placeholder:text-primary-400 min-h-10 w-full rounded-lg border ps-9 pe-3 text-sm"
+              style={{ direction: "rtl", textAlign: "start" }}
+            />
+          </div>
         </div>
       ) : null}
 
+      {visible.length === 0 ? (
+        <AdminEmpty icon="search" title="لا نتائج مطابقة" description="جرّب كلمة أخرى أو امسح البحث." />
+      ) : null}
+
+      {visible.length > 0 ? (
       <AdminTable
         caption={`قائمة ${singular}`}
         head={
@@ -102,11 +140,11 @@ export function ResourceTable({
                 {column.label}
               </Th>
             ))}
-            <Th className="text-left">إجراءات</Th>
+            <Th className="text-end">إجراءات</Th>
           </>
         }
       >
-        {rows.map((row) => {
+        {visible.map((row) => {
           const id = String(row.id);
           const label = String(row.name ?? row.title ?? row.question ?? row.code ?? id);
 
@@ -129,7 +167,7 @@ export function ResourceTable({
                 </Td>
               ))}
 
-              <Td className="text-left">
+              <Td className="text-end">
                 <div className="flex items-center justify-end gap-1">
                   <Link
                     href={`/admin/${resourceSlug}/${id}`}
@@ -137,18 +175,18 @@ export function ResourceTable({
                     title="تعديل"
                     className="text-primary-500 hover:bg-surface-sunken hover:text-primary-900 grid size-8 place-items-center rounded-md transition-colors"
                   >
-                    <Icon name="edit" className="size-4" />
+                    <AdminIcon name="edit" className="size-4" />
                   </Link>
 
                   <button
                     type="button"
-                    onClick={() => handleDelete(id, label)}
+                    onClick={() => void handleDelete(id, label)}
                     disabled={pending}
                     aria-label={`حذف ${label}`}
                     title="حذف"
                     className="text-primary-500 hover:bg-danger-50 hover:text-danger-600 grid size-8 place-items-center rounded-md transition-colors disabled:opacity-40"
                   >
-                    <Icon name="trash" className="size-4" />
+                    <AdminIcon name="trash" className="size-4" />
                   </button>
                 </div>
               </Td>
@@ -156,6 +194,7 @@ export function ResourceTable({
           );
         })}
       </AdminTable>
+      ) : null}
     </>
   );
 }

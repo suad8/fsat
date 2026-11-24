@@ -10,9 +10,9 @@ import {
   deleteServiceAction,
   toggleContentFieldAction,
 } from "@/app/admin/(dashboard)/actions/content";
+import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminTable, Td, Th } from "@/components/admin/AdminUi";
-import { Alert } from "@/components/ui/Alert";
-import { Icon } from "@/components/ui/Icon";
+import { useConfirm, useToast } from "@/components/admin/Feedback";
 import { formatDate } from "@/lib/utils";
 
 export type ContentRow = {
@@ -47,24 +47,35 @@ export function ContentTable({
   featuredLabel: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
-  function remove(row: ContentRow) {
-    if (!confirm(`هل تريد حذف «${row.title}»؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? rows.filter((row) => `${row.title} ${row.slug} ${row.meta}`.toLowerCase().includes(needle))
+    : rows;
+
+  async function remove(row: ContentRow) {
+    const ok = await confirm({
+      title: `حذف «${row.title}»؟`,
+      description: "لا يمكن التراجع عن هذا الإجراء.",
+      confirmLabel: "احذف",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     startTransition(async () => {
       const result =
-        model === "project"
-          ? await deleteProjectAction(row.id)
-          : await deleteServiceAction(row.id);
+        model === "project" ? await deleteProjectAction(row.id) : await deleteServiceAction(row.id);
 
       if (!result.ok) {
-        setError(result.error ?? "تعذّر الحذف.");
+        toast.error("تعذّر الحذف", result.error);
         return;
       }
 
-      setError(null);
+      toast.success(`حُذف «${row.title}»`);
       router.refresh();
     });
   }
@@ -73,24 +84,43 @@ export function ContentTable({
     startTransition(async () => {
       const result = await toggleContentFieldAction(model, id, field, next);
       if (!result.ok) {
-        setError(result.error ?? "تعذّر التحديث.");
+        toast.error("تعذّر التحديث", result.error);
         return;
       }
-      setError(null);
+      toast.success(next ? "تم التفعيل" : "تم الإيقاف");
       router.refresh();
     });
   }
 
   return (
     <>
-      {error ? (
-        <div className="p-4">
-          <Alert tone="danger" live>
-            {error}
-          </Alert>
+      {rows.length > 6 ? (
+        <div className="border-border border-b p-3">
+          <label htmlFor="content-filter" className="sr-only">
+            بحث في القائمة
+          </label>
+          <div className="relative max-w-sm">
+            <AdminIcon
+              name="search"
+              className="text-primary-400 pointer-events-none absolute inset-y-0 start-3 my-auto size-4"
+            />
+            <input
+              id="content-filter"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="ابحث بالعنوان أو التصنيف…"
+              autoComplete="off"
+              className="border-border-strong bg-surface text-primary-900 placeholder:text-primary-400 min-h-10 w-full rounded-lg border ps-9 pe-3 text-sm"
+              style={{ direction: "rtl", textAlign: "start" }}
+            />
+          </div>
         </div>
       ) : null}
 
+      {visible.length === 0 ? (
+        <p className="text-primary-500 px-5 py-10 text-center text-sm">لا نتائج مطابقة للبحث.</p>
+      ) : (
       <AdminTable
         caption="القائمة"
         head={
@@ -100,11 +130,11 @@ export function ContentTable({
             <Th>منشور</Th>
             <Th>{featuredLabel}</Th>
             <Th>آخر تحديث</Th>
-            <Th className="text-left">إجراءات</Th>
+            <Th className="text-end">إجراءات</Th>
           </>
         }
       >
-        {rows.map((row) => (
+        {visible.map((row) => (
           <tr
             key={row.id}
             className={`hover:bg-surface-muted transition-colors ${pending ? "opacity-60" : ""}`}
@@ -122,7 +152,7 @@ export function ContentTable({
                     />
                   ) : (
                     <span className="text-primary-300 grid h-full place-items-center">
-                      <Icon name="image" className="size-5" strokeWidth={1.4} />
+                      <AdminIcon name="image" className="size-5" strokeWidth={1.4} />
                     </span>
                   )}
                 </span>
@@ -165,7 +195,7 @@ export function ContentTable({
               {formatDate(row.updatedAt)}
             </Td>
 
-            <Td className="text-left">
+            <Td className="text-end">
               <div className="flex items-center justify-end gap-1">
                 <Link
                   href={`${publicPath}/${row.slug}`}
@@ -174,7 +204,7 @@ export function ContentTable({
                   title="معاينة"
                   className="text-primary-500 hover:bg-surface-sunken hover:text-primary-900 grid size-8 place-items-center rounded-md transition-colors"
                 >
-                  <Icon name="externalLink" className="size-4" />
+                  <AdminIcon name="externalLink" className="size-4" />
                 </Link>
 
                 <Link
@@ -183,24 +213,25 @@ export function ContentTable({
                   title="تعديل"
                   className="text-primary-500 hover:bg-surface-sunken hover:text-primary-900 grid size-8 place-items-center rounded-md transition-colors"
                 >
-                  <Icon name="edit" className="size-4" />
+                  <AdminIcon name="edit" className="size-4" />
                 </Link>
 
                 <button
                   type="button"
-                  onClick={() => remove(row)}
+                  onClick={() => void remove(row)}
                   disabled={pending}
                   aria-label={`حذف ${row.title}`}
                   title="حذف"
                   className="text-primary-500 hover:bg-danger-50 hover:text-danger-600 grid size-8 place-items-center rounded-md transition-colors disabled:opacity-40"
                 >
-                  <Icon name="trash" className="size-4" />
+                  <AdminIcon name="trash" className="size-4" />
                 </button>
               </div>
             </Td>
           </tr>
         ))}
       </AdminTable>
+      )}
     </>
   );
 }

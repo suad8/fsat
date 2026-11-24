@@ -3,15 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 
 import {
   deleteProductAction,
   toggleProductFieldAction,
 } from "@/app/admin/(dashboard)/actions/product";
+import { AdminIcon } from "@/components/admin/AdminIcon";
 import { AdminTable, Td, Th } from "@/components/admin/AdminUi";
-import { Alert } from "@/components/ui/Alert";
-import { Icon } from "@/components/ui/Icon";
+import { useConfirm, useToast } from "@/components/admin/Feedback";
 import { PRICE_MODE_LABELS, type PriceMode } from "@/lib/constants";
 import { formatPriceWithCurrency } from "@/lib/utils";
 
@@ -33,23 +33,28 @@ export type ProductRow = {
 
 export function ProductsTable({ products }: { products: ProductRow[] }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ tone: "danger" | "warning"; text: string } | null>(
-    null,
-  );
 
-  function handleDelete(product: ProductRow) {
-    if (!confirm(`هل تريد حذف «${product.name}»؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+  async function handleDelete(product: ProductRow) {
+    const ok = await confirm({
+      title: `حذف «${product.name}»؟`,
+      description: "إن كان المنتج مرتبطًا بطلبات سابقة فسيُخفى بدل أن يُحذف حفاظًا على سجل الطلبات.",
+      confirmLabel: "احذف",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     startTransition(async () => {
       const result = await deleteProductAction(product.id);
       if (!result.ok) {
         // المنتج المرتبط بطلبات يُخفى بدل حذفه — رسالة تنبيه لا خطأ
-        setNotice({ tone: "warning", text: result.error ?? "تعذّر الحذف." });
+        toast.info("لم يُحذف المنتج", result.error);
         router.refresh();
         return;
       }
-      setNotice(null);
+      toast.success(`حُذف «${product.name}»`);
       router.refresh();
     });
   }
@@ -58,24 +63,20 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
     startTransition(async () => {
       const result = await toggleProductFieldAction(id, field, next);
       if (!result.ok) {
-        setNotice({ tone: "danger", text: result.error ?? "تعذّر التحديث." });
+        toast.error("تعذّر التحديث", result.error);
         return;
       }
-      setNotice(null);
+      toast.success(
+        field === "isActive"
+          ? next ? "نُشر المنتج في المتجر" : "أُخفي المنتج من المتجر"
+          : next ? "أصبح المنتج مميّزًا" : "أُزيل التمييز",
+      );
       router.refresh();
     });
   }
 
   return (
     <>
-      {notice ? (
-        <div className="p-4">
-          <Alert tone={notice.tone} live>
-            {notice.text}
-          </Alert>
-        </div>
-      ) : null}
-
       <AdminTable
         caption="قائمة المنتجات"
         head={
@@ -86,7 +87,7 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
             <Th>الخيارات</Th>
             <Th>منشور</Th>
             <Th>مميّز</Th>
-            <Th className="text-left">إجراءات</Th>
+            <Th className="text-end">إجراءات</Th>
           </>
         }
       >
@@ -108,7 +109,7 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
                     />
                   ) : (
                     <span className="text-primary-300 grid h-full place-items-center">
-                      <Icon name="package" className="size-5" strokeWidth={1.4} />
+                      <AdminIcon name="package" className="size-5" strokeWidth={1.4} />
                     </span>
                   )}
                 </span>
@@ -164,7 +165,7 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
               />
             </Td>
 
-            <Td className="text-left">
+            <Td className="text-end">
               <div className="flex items-center justify-end gap-1">
                 <Link
                   href={`/shop/${product.categorySlug}/${product.slug}`}
@@ -173,7 +174,7 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
                   title="معاينة"
                   className="text-primary-500 hover:bg-surface-sunken hover:text-primary-900 grid size-8 place-items-center rounded-md transition-colors"
                 >
-                  <Icon name="externalLink" className="size-4" />
+                  <AdminIcon name="externalLink" className="size-4" />
                 </Link>
 
                 <Link
@@ -182,18 +183,18 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
                   title="تعديل"
                   className="text-primary-500 hover:bg-surface-sunken hover:text-primary-900 grid size-8 place-items-center rounded-md transition-colors"
                 >
-                  <Icon name="edit" className="size-4" />
+                  <AdminIcon name="edit" className="size-4" />
                 </Link>
 
                 <button
                   type="button"
-                  onClick={() => handleDelete(product)}
+                  onClick={() => void handleDelete(product)}
                   disabled={pending}
                   aria-label={`حذف ${product.name}`}
                   title="حذف"
                   className="text-primary-500 hover:bg-danger-50 hover:text-danger-600 grid size-8 place-items-center rounded-md transition-colors disabled:opacity-40"
                 >
-                  <Icon name="trash" className="size-4" />
+                  <AdminIcon name="trash" className="size-4" />
                 </button>
               </div>
             </Td>
