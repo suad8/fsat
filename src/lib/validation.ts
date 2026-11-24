@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   CONTACT_PREFERENCES,
   FULFILLMENT_METHODS,
+  MAX_DESIGN_SIZE,
   PAYMENT_METHODS,
   SAUDI_CITIES,
 } from "@/lib/constants";
@@ -73,13 +74,33 @@ export const honeypot = z
   .optional()
   .or(z.literal("").transform(() => undefined));
 
+/**
+ * رابط مرفق مرفوع.
+ *
+ * الرابط يأتي من المتصفّح فلا يُوثق به: يُقبل فقط شكلا الروابط التي يولّدها
+ * مسار الرفع نفسه. بدون هذا يستطيع زائر تخزين `javascript:` أو رابط تصيّد في
+ * الطلب، فيظهر كرابط قابل للنقر في لوحة الإدارة (XSS مخزَّن / تصيّد).
+ */
+export const UPLOAD_URL_PATTERN =
+  /^(?:\/uploads\/[a-z0-9-]{1,32}\/[a-z0-9]+-[a-f0-9]{16}\.(?:webp|png|jpg|avif)|\/api\/admin\/files\/[a-z0-9]+-[a-f0-9]{16}\.[a-z0-9]{1,5})$/i;
+
 /** مرفق مرفوع — يُحفظ مساره فقط بعد أن يتحقق منه مسار الرفع. */
-const attachment = z.object({
+export const attachmentSchema = z.object({
   kind: z.enum(["DESIGN", "LOGO", "REFERENCE"]).default("REFERENCE"),
-  name: z.string().trim().min(1).max(255),
-  url: z.string().trim().min(1).max(500),
-  size: z.number().int().nonnegative(),
-  mimeType: z.string().trim().max(120),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(255)
+    // محارف التحكم تفسد السجلّات والعرض
+    .transform((value) => value.replace(/[\u0000-\u001f\u007f]/g, " ")),
+  url: z.string().trim().max(300).regex(UPLOAD_URL_PATTERN, "رابط المرفق غير صالح"),
+  size: z.number().int().nonnegative().max(MAX_DESIGN_SIZE),
+  mimeType: z
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^[a-z]+\/[a-z0-9.+-]{1,80}$/i, "نوع الملف غير صالح"),
 });
 
 // ---------------------------------------------------------------------------
@@ -111,7 +132,7 @@ export const quoteRequestSchema = z.object({
       "صيغة التاريخ غير صحيحة",
     ),
   preferredContact: z.enum(CONTACT_PREFERENCES).default("WHATSAPP"),
-  attachments: z.array(attachment).max(10).optional(),
+  attachments: z.array(attachmentSchema).max(10).optional(),
   acceptTerms: z
     .union([z.literal("on"), z.literal("true"), z.boolean()])
     .refine((value) => value === true || value === "on" || value === "true", {
@@ -148,10 +169,15 @@ export type ContactMessageData = z.output<typeof contactMessageSchema>;
 
 /** بند سلة كما يصل من المتصفّح — تُعاد كل الأسعار حسابًا على الخادم. */
 export const checkoutItemSchema = z.object({
-  productId: z.string().trim().min(1),
+  productId: z.string().trim().min(1).max(64),
   quantity: z.number().int().positive().max(1_000_000),
   /** معرّفات القيم المختارة: مفتاح المجموعة ← معرّف أو مصفوفة معرّفات. */
-  selection: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+  selection: z
+    .record(
+      z.string().max(64),
+      z.union([z.string().max(600), z.array(z.string().max(64)).max(50)]),
+    )
+    .refine((value) => Object.keys(value).length <= 40, "خيارات كثيرة جدًا"),
   notes: z.string().trim().max(500).optional(),
 });
 
@@ -172,7 +198,7 @@ export const checkoutSchema = z
     couponCode: z.string().trim().max(40).optional().or(z.literal("").transform(() => undefined)),
     notes: z.string().trim().max(1000).optional().or(z.literal("").transform(() => undefined)),
 
-    items: z.array(checkoutItemSchema).min(1, "السلة فارغة"),
+    items: z.array(checkoutItemSchema).min(1, "السلة فارغة").max(50, "عدد البنود كبير جدًا"),
 
     acceptTerms: z
       .union([z.literal("on"), z.literal("true"), z.boolean()])

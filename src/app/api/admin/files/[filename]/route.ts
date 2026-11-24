@@ -1,17 +1,18 @@
 import { readFile, stat } from "node:fs/promises";
 
-import { NextResponse } from "next/server";
-
 import { requireAdmin } from "@/lib/auth";
+import { apiError } from "@/lib/security/api";
+import { clientIp } from "@/lib/security/ip";
+import { logSecurityEvent } from "@/lib/security/log";
 import { resolvePrivateFile } from "@/lib/upload";
 
 /**
  * تنزيل ملفات التصاميم التي يرفعها العملاء.
  *
  * هذه الملفات (PDF/AI/PSD/ZIP) لا يمكن إعادة ترميزها للتأكد من سلامتها، لذا
- * تُحفظ خارج مجلد public ولا تُخدَم إلا من هنا بعد التحقق من جلسة الإدارة.
- * كما تُرسل بترويسات تُجبر المتصفّح على تنزيلها بدل عرضها، فلا تُنفَّذ في سياق
- * نطاق الموقع.
+ * تُحفظ خارج مجلد public ولا تُخدَم إلا من هنا بعد التحقق العميق من جلسة الإدارة.
+ * وتُرسل بترويسات تُجبر المتصفّح على تنزيلها بدل عرضها فلا تُنفَّذ في سياق
+ * نطاق الموقع، مع CSP بصندوق رمل احتياطًا لو فُتحت رغم ذلك.
  */
 export const runtime = "nodejs";
 
@@ -28,13 +29,15 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ filename: string }> },
 ) {
+  let admin;
   try {
-    await requireAdmin();
+    admin = await requireAdmin();
   } catch {
-    return NextResponse.json({ message: "غير مصرّح." }, { status: 401 });
+    logSecurityEvent("unauthorized", { where: "api/admin/files", ip: clientIp(request.headers) });
+    return apiError(401, "غير مصرّح.", {}, { "Cache-Control": "no-store" });
   }
 
   const { filename } = await params;
@@ -42,7 +45,7 @@ export async function GET(
   // يتحقق من صيغة الاسم ومن بقاء المسار داخل مجلد الملفات الخاصة
   const path = resolvePrivateFile(filename);
   if (!path) {
-    return NextResponse.json({ message: "ملف غير صالح." }, { status: 400 });
+    return apiError(400, "ملف غير صالح.");
   }
 
   try {
@@ -52,17 +55,21 @@ export async function GET(
     const data = await readFile(path);
     const extension = filename.split(".").pop()?.toLowerCase() ?? "";
 
-    return new NextResponse(new Uint8Array(data), {
+    logSecurityEvent("private_file_read", { userId: admin.id, file: filename }, "info");
+
+    return new Response(new Uint8Array(data), {
       headers: {
         "Content-Type": CONTENT_TYPES[extension] ?? "application/octet-stream",
-        // attachment يمنع عرض الملف داخل الصفحة
+        // attachment يمنع عرض الملف داخل الصفحة؛ الاسم مطابق لنمط مولَّد فلا حقن ترويسات
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": String(info.size),
         "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Cross-Origin-Resource-Policy": "same-origin",
         "Cache-Control": "private, no-store",
       },
     });
   } catch {
-    return NextResponse.json({ message: "الملف غير موجود." }, { status: 404 });
+    return apiError(404, "الملف غير موجود.");
   }
 }

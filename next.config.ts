@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { publicCsp } from "./src/lib/security/csp";
+
 /**
  * النطاقات المسموح لها بإرسال Server Actions.
  *
@@ -35,23 +37,89 @@ const nextConfig: NextConfig = {
     imageSizes: [40, 64, 80, 96, 120, 180, 256, 384],
   },
 
-  // ترويسات أمان أساسية تُطبَّق على كل الاستجابات
+  // لا نعلن عن التقنية المستعملة (يسهّل استهداف ثغرات إصدار محدّد)
+  poweredByHeader: false,
+
+  /*
+   * الصور المرفوعة تُقدَّم عبر مسار API لأن next start لا يخدم ملفات public/
+   * المضافة بعد البناء (انظر src/app/api/media). beforeFiles ليسبق ملفات public.
+   */
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/uploads/:folder/:filename", destination: "/api/media/:folder/:filename" },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
+
+  /*
+   * الترويسات الأمنية.
+   *
+   * لوحة الإدارة (/admin) ومسارات /api لا تأخذ CSP من هنا: لوحة الإدارة تحصل على
+   * CSP بـ nonce لكل طلب من src/proxy.ts، والـ API من الـ proxy أيضًا. استثناؤهما
+   * من القاعدة العامة يمنع ترويستين متعارضتين (يطبّق المتصفّح تقاطعهما).
+   *
+   * السياسات نفسها في src/lib/security/csp.ts مع شرح سبب اختلافها.
+   */
   async headers() {
+    const isProd = process.env.NODE_ENV === "production";
+
     return [
       {
         source: "/:path*",
         headers: [
           // يمنع المتصفّح من تخمين نوع المحتوى خلافًا لما نصرّح به
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // يمنع تضمين الموقع داخل إطار في موقع آخر (clickjacking)
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // منع التضمين في إطار (clickjacking) — يوازي frame-ancestors في CSP للمتصفّحات القديمة
+          { key: "X-Frame-Options", value: "DENY" },
           // لا يُرسل المسار الكامل للمواقع الخارجية عند الخروج من الموقع
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // لا نستخدم أيًّا من هذه الواجهات، فنغلقها صراحةً
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+            value: [
+              "camera=()",
+              "microphone=()",
+              "geolocation=()",
+              "payment=()",
+              "usb=()",
+              "serial=()",
+              "midi=()",
+              "accelerometer=()",
+              "gyroscope=()",
+              "magnetometer=()",
+              "interest-cohort=()",
+              "browsing-topics=()",
+            ].join(", "),
           },
+          // يعزل نافذة الموقع عن النوافذ المفتوحة منه/إليه (يغلق قنوات Spectre/tabnabbing)
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+          { key: "X-DNS-Prefetch-Control", value: "off" },
+          // HSTS يُرسل في الإنتاج فقط؛ المتصفّح يتجاهله على http ويلتزم به عبر https
+          ...(isProd
+            ? [
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=63072000; includeSubDomains",
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        // الموقع العام (يُستثنى admin وapi وuploads — لكلٍّ سياسته)
+        source: "/((?!admin(?:/|$)|api(?:/|$)|uploads(?:/|$)).*)",
+        headers: [{ key: "Content-Security-Policy", value: publicCsp() }],
+      },
+      {
+        // الصور المرفوعة: لا تُعرض كمستند أبدًا حتى لو تلاعب أحد بنوعها
+        source: "/uploads/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "default-src 'none'; sandbox" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
         ],
       },
     ];
