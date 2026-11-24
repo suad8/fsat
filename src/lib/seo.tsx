@@ -1,6 +1,7 @@
 import { contact, siteUrl } from "@/config/brand";
 import type { Settings } from "@/lib/settings";
 import { absoluteUrl, truncate } from "@/lib/utils";
+import { safeJsonLd } from "@/lib/security/json-ld";
 
 /**
  * البيانات المنظّمة (JSON-LD).
@@ -191,7 +192,7 @@ export function JsonLd({ data }: { data: JsonLd | JsonLd[] }) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(data) }}
     />
   );
 }

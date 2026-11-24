@@ -44,3 +44,7 @@ next-env.d.ts
 
 # نسخ العمل المعزولة للوكلاء
 /.claude/worktrees/
+
+# ملفات العملاء الخاصة: لا تُلتزم أبدًا
+/private-uploads
+/public/uploads/customer
