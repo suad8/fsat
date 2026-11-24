@@ -8,7 +8,10 @@ import { TextArea, TextInput } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { whatsappGeneralUrl } from "@/lib/whatsapp";
 
-/** نموذج "اتصل بنا". */
+/**
+ * نموذج «اتصل بنا» القصير: ثلاثة حقول فقط (الاسم، الجوال، الرسالة).
+ * البريد اختياري ومطوي حتى لا يطيل النموذج على من لا يحتاجه.
+ */
 export function ContactForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
@@ -30,7 +33,7 @@ export function ContactForm() {
           name: form.get("name"),
           phone: form.get("phone"),
           email: form.get("email") ?? "",
-          subject: form.get("subject") ?? "",
+          subject: "",
           message: form.get("message"),
           website: form.get("website") ?? "",
         }),
@@ -54,15 +57,16 @@ export function ContactForm() {
 
   if (status === "success") {
     return (
-      <div className="border-success-500/30 bg-success-50 rounded-xl border p-8 text-center">
-        <span className="bg-success-600 mx-auto mb-4 grid size-12 place-items-center rounded-full text-white">
-          <Icon name="check" className="size-6" strokeWidth={2.5} />
+      <div className="py-6 text-center md:py-10">
+        <span className="bg-success-600 mx-auto mb-5 grid size-14 place-items-center rounded-full text-white">
+          <Icon name="check" className="size-7" strokeWidth={2.5} />
         </span>
 
-        <h3 className="text-lg font-bold">وصلتنا رسالتك</h3>
+        <h3 className="text-xl font-black">وصلتنا رسالتك</h3>
 
-        <p className="text-primary-700 mx-auto mt-2.5 max-w-sm text-sm leading-relaxed">
-          شكرًا لتواصلك. سيرد عليك فريقنا خلال يوم عمل واحد على الرقم الذي زوّدتنا به.
+        <p className="text-primary-600 mx-auto mt-3 max-w-sm text-sm leading-relaxed">
+          شكرًا لتواصلك. سيردّ عليك فريقنا خلال يوم عمل على الرقم الذي زوّدتنا به. وإن كان
+          الأمر عاجلًا فواتساب أسرع.
         </p>
 
         <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -72,10 +76,10 @@ export function ContactForm() {
             variant="whatsapp"
             icon="whatsapp"
           >
-            تواصل الآن على واتساب
+            تابع على واتساب
           </ButtonLink>
-          <ButtonLink href="/shop" variant="outline">
-            تصفّح المنتجات
+          <ButtonLink href="/quote" variant="outline">
+            اطلب عرض سعر
           </ButtonLink>
         </div>
       </div>
@@ -109,34 +113,41 @@ export function ContactForm() {
           type="tel"
           required
           autoComplete="tel"
+          inputMode="tel"
           placeholder="05XXXXXXXX"
           error={errors.phone}
-        />
-        <TextInput
-          id="email"
-          label="البريد الإلكتروني"
-          type="email"
-          optional
-          autoComplete="email"
-          error={errors.email}
-        />
-        <TextInput
-          id="subject"
-          label="موضوع الرسالة"
-          optional
-          placeholder="مثال: استفسار عن طباعة بوكسات"
-          error={errors.subject}
         />
       </div>
 
       <TextArea
         id="message"
-        label="الرسالة"
+        label="رسالتك"
         required
-        rows={5}
-        placeholder="اكتب استفسارك أو ملاحظتك بالتفصيل."
+        rows={4}
+        placeholder="اكتب استفسارك باختصار: ماذا تريد أن تطبع، وبأي كمية تقريبًا؟"
         error={errors.message}
       />
+
+      <details className="group" open={Boolean(errors.email)}>
+        <summary className="text-primary-600 hover:text-primary-950 flex cursor-pointer list-none items-center gap-2 text-sm font-bold">
+          <Icon
+            name="plus"
+            className="size-4 transition-transform group-open:rotate-45"
+            strokeWidth={2}
+          />
+          أضف بريدك الإلكتروني (اختياري)
+        </summary>
+        <div className="mt-3">
+          <TextInput
+            id="email"
+            label="البريد الإلكتروني"
+            type="email"
+            optional
+            autoComplete="email"
+            error={errors.email}
+          />
+        </div>
+      </details>
 
       <Button
         type="submit"
@@ -147,10 +158,6 @@ export function ContactForm() {
       >
         {status === "submitting" ? "جارٍ الإرسال…" : "إرسال الرسالة"}
       </Button>
-
-      <p className="text-primary-500 text-center text-xs">
-        نرد على الرسائل خلال يوم عمل واحد. للاستعجال، تواصل معنا على واتساب.
-      </p>
     </form>
   );
 }
