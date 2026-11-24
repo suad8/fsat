@@ -1,0 +1,220 @@
+/* ==========================================================================
+   لوحة التحكم — طبقة أنماط محصورة بـ .adm
+   --------------------------------------------------------------------------
+   الأنماط هنا لما لا تعبّر عنه أصناف Tailwind بسهولة: الطباعة، الوضع الداكن
+   عبر إعادة ربط متغيّرات الألوان، حركة التنبيهات. كل المحدِّدات تبدأ بـ .adm
+   فلا يتسرّب شيء إلى صفحات الموقع حتى لو بقيت الورقة محمّلة بعد التنقّل.
+   ========================================================================== */
+
+.adm {
+  /* حبر الإدارة: يتبع --color-ink من الموقع إن وُجد، وإلا قيمة داكنة قريبة منه */
+  --adm-ink: var(--color-ink, #0d0820);
+  --adm-ink-raised: color-mix(in srgb, var(--adm-ink) 82%, white);
+  --adm-ink-line: color-mix(in srgb, var(--adm-ink) 76%, white);
+  --adm-ink-text: #b9b0d8;
+  --adm-gold: var(--color-accent-500, #fbc02d);
+  --adm-bnav-h: 0px;
+  color-scheme: light;
+}
+
+@media (max-width: 63.999rem) {
+  .adm {
+    --adm-bnav-h: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.adm :focus-visible {
+  outline: 2px solid var(--color-accent-600, #e5a511);
+  outline-offset: 2px;
+}
+
+/* على الأسطح الداكنة يلزم لون تركيز أفتح */
+.adm .adm-on-ink :focus-visible {
+  outline-color: var(--adm-gold);
+}
+
+.adm h1,
+.adm h2,
+.adm h3 {
+  letter-spacing: normal;
+}
+
+/* ---------- الوضع الداكن: إعادة ربط الرموز داخل .adm فقط ---------- */
+.adm[data-adm-theme="dark"] {
+  color-scheme: dark;
+
+  --color-surface: #17112e;
+  --color-surface-muted: #1c1536;
+  --color-surface-sunken: #110c24;
+  --color-border: #2d2452;
+  --color-border-strong: #43377a;
+
+  --color-primary-50: #1b1435;
+  --color-primary-100: #251c47;
+  --color-primary-200: #342a5f;
+  --color-primary-300: #4d4184;
+  --color-primary-400: #8274b6;
+  --color-primary-500: #a69bd0;
+  --color-primary-600: #bdb4de;
+  --color-primary-700: #d0c9e9;
+  --color-primary-800: #e0dbf2;
+  --color-primary-900: #eeebf8;
+  --color-primary-950: #faf8ff;
+
+  --color-accent-50: #2a2108;
+  --color-accent-100: #3a2d0a;
+  --color-accent-600: #f0b52a;
+  --color-accent-700: #f7cf6a;
+  --color-accent-800: #fbdc90;
+
+  --color-brand-50: #211a4d;
+  --color-brand-100: #2b2266;
+  --color-brand-700: #b7a3ff;
+
+  --color-success-50: #0e2a1b;
+  --color-success-100: #123522;
+  --color-success-700: #6ee7a3;
+  --color-warning-50: #2c2008;
+  --color-warning-100: #3a2b0a;
+  --color-warning-700: #fbbf55;
+  --color-danger-50: #2f1316;
+  --color-danger-100: #3d181c;
+  --color-danger-700: #fca5a5;
+  --color-info-50: #0f2038;
+  --color-info-100: #132b4a;
+  --color-info-700: #93c5fd;
+}
+
+/* الأزرار «الداكنة» تنقلب ذهبية في الوضع الداكن كي لا يضيع تباين النص الأبيض */
+.adm[data-adm-theme="dark"] .bg-primary-950.text-white {
+  background-color: var(--adm-gold);
+  color: #261747;
+}
+.adm[data-adm-theme="dark"] .bg-primary-950.text-white:hover {
+  background-color: color-mix(in srgb, var(--adm-gold) 88%, white);
+}
+
+/* ---------- حركات خفيفة (CSS) ---------- */
+@keyframes adm-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.adm .adm-toast {
+  animation: adm-toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes adm-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.adm .adm-fade {
+  animation: adm-fade-in 0.16s ease-out both;
+}
+
+@keyframes adm-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.adm .adm-pop {
+  animation: adm-pop-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm .adm-toast,
+  .adm .adm-fade,
+  .adm .adm-pop {
+    animation: none;
+  }
+}
+
+/* ---------- هيكل تحميل ---------- */
+@keyframes adm-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+.adm .adm-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-sunken) 25%,
+    var(--color-border) 50%,
+    var(--color-surface-sunken) 75%
+  );
+  background-size: 200% 100%;
+  animation: adm-shimmer 1.6s linear infinite;
+  border-radius: 0.5rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm .adm-skeleton {
+    animation: none;
+  }
+}
+
+/* ---------- الطباعة ---------- */
+.adm .adm-print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .adm {
+    background: #fff !important;
+  }
+
+  .adm .adm-chrome,
+  .adm .no-print {
+    display: none !important;
+  }
+
+  .adm .adm-print-only {
+    display: block;
+  }
+
+  .adm .adm-main {
+    padding: 0 !important;
+  }
+
+  .adm .adm-doc {
+    box-shadow: none !important;
+    border: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  .adm .adm-doc table {
+    break-inside: auto;
+  }
+  .adm .adm-doc tr {
+    break-inside: avoid;
+  }
+}
