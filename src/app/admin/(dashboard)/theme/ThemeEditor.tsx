@@ -4,8 +4,15 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { saveSectionsAction, saveThemeAction } from "@/app/admin/(dashboard)/actions/theme";
-import { AdminCard } from "@/components/admin/AdminUi";
-import { Alert } from "@/components/ui/Alert";
+import { useToast } from "@/components/admin/Feedback";
+import {
+  FormSection,
+  SaveBar,
+  SectionsToggle,
+  useDirty,
+  useSaveShortcut,
+  useUnsavedWarning,
+} from "@/components/admin/FormKit";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Checkbox, Select, TextArea, TextInput } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
@@ -49,12 +56,13 @@ export function ThemeEditor({
   initialSections: SectionRow[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [sections, setSections] = useState<SectionRow[]>(initialSections);
   const [pending, startTransition] = useTransition();
-  const [feedback, setFeedback] = useState<{ tone: "success" | "danger"; text: string } | null>(
-    null,
-  );
+  const { dirty, markSaved } = useDirty({ theme, sections });
+
+  useUnsavedWarning(dirty);
 
   const scales = useMemo(
     () => ({
@@ -66,10 +74,13 @@ export function ThemeEditor({
   );
 
   function save() {
+    if (pending) return;
+    const sent = { theme, sections };
+
     startTransition(async () => {
       const themeResult = await saveThemeAction(theme);
       if (!themeResult.ok) {
-        setFeedback({ tone: "danger", text: themeResult.error ?? "تعذّر الحفظ." });
+        toast.error("تعذّر حفظ الألوان", themeResult.error);
         return;
       }
 
@@ -85,14 +96,17 @@ export function ThemeEditor({
       );
 
       if (!sectionsResult.ok) {
-        setFeedback({ tone: "danger", text: sectionsResult.error ?? "تعذّر حفظ الأقسام." });
+        toast.error("تعذّر حفظ الأقسام", sectionsResult.error);
         return;
       }
 
-      setFeedback({ tone: "success", text: "تم حفظ الثيم وتحديث الموقع." });
+      markSaved(sent);
+      toast.success("تم حفظ الثيم", "طُبّق على الموقع فورًا.");
       router.refresh();
     });
   }
+
+  useSaveShortcut(save);
 
   function move(index: number, direction: -1 | 1) {
     const target = index + direction;
@@ -106,14 +120,13 @@ export function ThemeEditor({
 
   return (
     <div className="space-y-6">
-      {feedback ? (
-        <Alert tone={feedback.tone} live>
-          {feedback.text}
-        </Alert>
-      ) : null}
+      <div className="flex justify-end">
+        <SectionsToggle />
+      </div>
 
       {/* --- الألوان --- */}
-      <AdminCard
+      <FormSection
+        id="colors"
         title="ألوان الموقع"
         description="اختر ثلاثة ألوان، ويُولَّد منها تدرّج كامل تلقائيًا لكل الموقع."
       >
@@ -151,15 +164,15 @@ export function ThemeEditor({
             استعادة ألوان الهوية الأصلية
           </Button>
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- المعاينة --- */}
-      <AdminCard title="معاينة مباشرة" description="هكذا يظهر الموقع بالألوان المختارة.">
+      <FormSection id="preview" title="معاينة مباشرة" description="هكذا يظهر الموقع بالألوان المختارة.">
         <Preview theme={theme} scales={scales} />
-      </AdminCard>
+      </FormSection>
 
       {/* --- الخط والانحناء --- */}
-      <AdminCard title="الخط والشكل">
+      <FormSection id="font" title="الخط والشكل" summary="خط الموقع وانحناء الأركان">
         <div className="grid gap-5 md:grid-cols-2">
           <Select
             id="font"
@@ -193,10 +206,11 @@ export function ThemeEditor({
             ))}
           </Select>
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- الأقسام --- */}
-      <AdminCard
+      <FormSection
+        id="sections"
         title="أقسام الصفحة الرئيسية"
         description={`${activeCount} من ${sections.length} أقسام ظاهرة. أطفئ ما لا تحتاجه — كل قسم إضافي يطيل الصفحة على الجوال.`}
       >
@@ -305,16 +319,9 @@ export function ThemeEditor({
             </li>
           ))}
         </ul>
-      </AdminCard>
+      </FormSection>
 
-      <div className="border-border bg-surface sticky bottom-0 flex flex-wrap items-center gap-3 border-t p-4">
-        <Button size="lg" onClick={save} disabled={pending} icon={pending ? undefined : "check"}>
-          {pending ? "جارٍ الحفظ…" : "حفظ الثيم"}
-        </Button>
-        <p className="text-primary-500 text-xs">
-          يُطبَّق على الموقع فورًا بعد الحفظ.
-        </p>
-      </div>
+      <SaveBar pending={pending} dirty={dirty} onSave={save} saveLabel="حفظ الثيم" />
     </div>
   );
 }

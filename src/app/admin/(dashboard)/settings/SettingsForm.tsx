@@ -4,9 +4,18 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { saveSettingsAction } from "@/app/admin/(dashboard)/actions/settings";
-import { AdminCard } from "@/components/admin/AdminUi";
+import { useToast } from "@/components/admin/Feedback";
+import {
+  focusFirstInvalid,
+  FormSection,
+  REQUIRED_MESSAGE,
+  SaveBar,
+  SectionsToggle,
+  useDirty,
+  useSaveShortcut,
+  useUnsavedWarning,
+} from "@/components/admin/FormKit";
 import { ImageField } from "@/components/admin/ImageField";
-import { Alert } from "@/components/ui/Alert";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Checkbox, TextArea, TextInput } from "@/components/ui/Field";
 import { SAUDI_CITIES } from "@/lib/constants";
@@ -50,51 +59,79 @@ export type SettingsDraft = {
 /** نموذج بيانات المنشأة والإعدادات العامة. */
 export function SettingsForm({ initial }: { initial: SettingsDraft }) {
   const router = useRouter();
+  const toast = useToast();
   const [draft, setDraft] = useState<SettingsDraft>(initial);
   const [pending, startTransition] = useTransition();
-  const [state, setState] = useState<{
-    tone: "success" | "danger";
-    text: string;
-    fieldErrors?: Record<string, string>;
-  } | null>(null);
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
+  const [showErrors, setShowErrors] = useState(false);
+  const { dirty, markSaved } = useDirty(draft);
+
+  useUnsavedWarning(dirty);
 
   function patch(changes: Partial<SettingsDraft>) {
     setDraft((current) => ({ ...current, ...changes }));
   }
 
+  // إلزامي: اسم المنشأة. بيانات التواصل لا تمنع الحفظ لكنها تُنبَّه عليها في لوحة المعلومات.
+  const clientErrors: Record<string, string> = {};
+  if (!draft.companyName.trim()) clientErrors.companyName = REQUIRED_MESSAGE;
+  const errors = { ...serverErrors, ...(showErrors ? clientErrors : {}) };
+  const errorIds = Object.keys(errors);
+  const sectionOf: Record<string, string> = {
+    companyName: "identity",
+    phone: "contact",
+    whatsapp: "contact",
+    email: "contact",
+    mapUrl: "contact",
+    vatNumber: "legal",
+    vatRate: "legal",
+  };
+  const invalidIn = (section: string) =>
+    errorIds.filter((key) => sectionOf[key] === section).length;
+
   function save() {
+    if (pending) return;
+
+    if (Object.keys(clientErrors).length > 0) {
+      setShowErrors(true);
+      toast.error("أكمل الحقول المطلوبة", "اسم المنشأة مطلوب.");
+      window.setTimeout(() => focusFirstInvalid(Object.keys(clientErrors)), 60);
+      return;
+    }
+
+    const sent = draft;
+
     startTransition(async () => {
-      const result = await saveSettingsAction(draft);
+      const result = await saveSettingsAction(sent);
 
       if (!result.ok) {
-        setState({
-          tone: "danger",
-          text: result.error ?? "تعذّر الحفظ.",
-          fieldErrors: result.fieldErrors,
-        });
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        setServerErrors(result.fieldErrors ?? {});
+        toast.error("تعذّر حفظ الإعدادات", result.error ?? "راجع الحقول المعلَّمة.");
+        window.setTimeout(() => focusFirstInvalid(Object.keys(result.fieldErrors ?? {})), 60);
         return;
       }
 
-      setState({ tone: "success", text: "تم حفظ الإعدادات وتحديث الموقع." });
+      setServerErrors({});
+      markSaved(sent);
+      toast.success("تم حفظ الإعدادات", "طُبّقت على الموقع فورًا.");
       router.refresh();
     });
   }
 
-  const errors = state?.fieldErrors ?? {};
+  useSaveShortcut(save);
 
   return (
     <div className="space-y-6">
-      {state ? (
-        <Alert tone={state.tone} live>
-          {state.text}
-        </Alert>
-      ) : null}
+      <div className="flex justify-end">
+        <SectionsToggle />
+      </div>
 
       {/* --- الهوية --- */}
-      <AdminCard
+      <FormSection
+        id="identity"
         title="هوية المنشأة"
         description="الاسم والشعار يظهران في الترويسة والفوتر وعناوين الصفحات."
+        invalidCount={invalidIn("identity")}
       >
         <div className="grid gap-5 md:grid-cols-2">
           <TextInput
@@ -142,12 +179,14 @@ export function SettingsForm({ initial }: { initial: SettingsDraft }) {
             help="يُستخدم في الفوتر ذي الخلفية الداكنة."
           />
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- التواصل --- */}
-      <AdminCard
+      <FormSection
+        id="contact"
         title="بيانات التواصل"
         description="تظهر في الترويسة والفوتر وصفحة اتصل بنا، وتُستخدم في أزرار الاتصال والواتساب."
+        invalidCount={invalidIn("contact")}
       >
         <div className="grid gap-5 md:grid-cols-2">
           <TextInput
@@ -231,12 +270,15 @@ export function SettingsForm({ initial }: { initial: SettingsDraft }) {
             wrapperClassName="md:col-span-2"
           />
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- التواصل الاجتماعي --- */}
-      <AdminCard
+      <FormSection
+        id="social"
         title="حسابات التواصل الاجتماعي"
         description="الحسابات الفارغة لا تظهر في الفوتر."
+        defaultOpen={false}
+        summary="انستقرام، تويتر، تيك توك، سناب، لينكدإن، يوتيوب"
       >
         <div className="grid gap-5 md:grid-cols-2">
           {(
@@ -263,12 +305,15 @@ export function SettingsForm({ initial }: { initial: SettingsDraft }) {
             />
           ))}
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- الضريبة --- */}
-      <AdminCard
+      <FormSection
+        id="legal"
         title="البيانات النظامية والضريبة"
         description="تظهر في الفوتر وفي الفواتير، وتؤثر على حساب المبالغ في صفحة إتمام الطلب."
+        invalidCount={invalidIn("legal")}
+        summary={draft.vatNumber ? `الرقم الضريبي ${draft.vatNumber}` : "الرقم الضريبي غير مسجّل"}
       >
         <div className="grid gap-5 md:grid-cols-2">
           <TextInput
@@ -310,12 +355,14 @@ export function SettingsForm({ initial }: { initial: SettingsDraft }) {
             />
           </div>
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- الدفع --- */}
-      <AdminCard
+      <FormSection
+        id="payment"
         title="طرق الدفع"
         description="الطرق المعطّلة لا تظهر للعميل في صفحة إتمام الطلب."
+        summary={`${draft.bankAccounts.length} حساب بنكي`}
       >
         <div className="space-y-3">
           <Checkbox
@@ -434,13 +481,16 @@ export function SettingsForm({ initial }: { initial: SettingsDraft }) {
             </ul>
           </div>
         ) : null}
-      </AdminCard>
+      </FormSection>
 
-      <div className="border-border bg-surface sticky bottom-0 border-t p-4">
-        <Button size="lg" onClick={save} disabled={pending} icon={pending ? undefined : "check"}>
-          {pending ? "جارٍ الحفظ…" : "حفظ الإعدادات"}
-        </Button>
-      </div>
+      <SaveBar
+        pending={pending}
+        dirty={dirty}
+        onSave={save}
+        saveLabel="حفظ الإعدادات"
+        errorCount={errorIds.length}
+        onShowErrors={() => focusFirstInvalid(errorIds)}
+      />
     </div>
   );
 }

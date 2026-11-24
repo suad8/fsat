@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { fetchResourceRecord } from "@/app/admin/(dashboard)/actions/resource";
-import { AdminCard, AdminHeading } from "@/components/admin/AdminUi";
+import { AdminHeading } from "@/components/admin/AdminUi";
 import { EntityForm } from "@/components/admin/EntityForm";
 import { getResource } from "@/lib/admin/resources";
 
@@ -33,14 +33,13 @@ export default async function EditResourcePage({ params }: { params: Params }) {
         backLabel={`رجوع إلى ${resource.title}`}
       />
 
-      <AdminCard>
-        <EntityForm
-          resource={resource.slug}
-          fields={resource.fields}
-          record={record}
-          listHref={`/admin/${resource.slug}`}
-        />
-      </AdminCard>
+      <EntityForm
+        title={`بيانات ${resource.singular}`}
+        resource={resource.slug}
+        fields={resource.fields}
+        record={record}
+        listHref={`/admin/${resource.slug}`}
+      />
     </>
   );
 }

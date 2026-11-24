@@ -1,16 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionState, useEffect, useRef } from "react";
 
 import {
   saveResourceAction,
   type ResourceState,
 } from "@/app/admin/(dashboard)/actions/resource";
 import { ImageField } from "@/components/admin/ImageField";
+import { useToast } from "@/components/admin/Feedback";
+import { FormSection, SaveBar, useSaveShortcut } from "@/components/admin/FormKit";
 import { Alert } from "@/components/ui/Alert";
-import { Button, ButtonLink } from "@/components/ui/Button";
 import { Checkbox, Select, TextArea, TextInput } from "@/components/ui/Field";
 import type { FieldDef } from "@/lib/admin/resources";
 
@@ -25,13 +25,18 @@ export function EntityForm({
   fields,
   record,
   listHref,
+  title = "البيانات",
 }: {
   resource: string;
   fields: FieldDef[];
   record?: Record<string, unknown> | null;
   listHref: string;
+  /** عنوان القسم الرئيسي. */
+  title?: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction] = useActionState<ResourceState, FormData>(
     saveResourceAction,
     {},
@@ -42,13 +47,24 @@ export function EntityForm({
   // بعد نجاح الحفظ نعود للقائمة ونحدّثها
   useEffect(() => {
     if (state.ok) {
+      toast.success(id ? "تم حفظ التعديلات" : "تمت الإضافة");
       router.push(listHref);
       router.refresh();
     }
-  }, [state.ok, router, listHref]);
+  }, [state.ok, router, listHref, toast, id]);
+
+  useEffect(() => {
+    if (state.error) toast.error("تعذّر الحفظ", state.error);
+  }, [state.error, toast]);
+
+  useSaveShortcut(() => formRef.current?.requestSubmit());
+
+  const seoFields = fields.filter((field) => field.name.startsWith("seo"));
+  const mainFields = fields.filter((field) => !field.name.startsWith("seo"));
+  const errorCount = Object.keys(state.fieldErrors ?? {}).length;
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form ref={formRef} action={formAction} className="space-y-6">
       <input type="hidden" name="__resource" value={resource} />
       {id ? <input type="hidden" name="__id" value={id} /> : null}
 
@@ -58,53 +74,65 @@ export function EntityForm({
         </Alert>
       ) : null}
 
-      <div className="grid gap-5 md:grid-cols-2">
-        {fields.map((field) => (
-          <FieldRenderer
-            key={field.name}
-            field={field}
-            value={record?.[field.name]}
-            error={state.fieldErrors?.[field.name]}
-          />
-        ))}
+      <FormSection id="main" title={title} invalidCount={errorCount}>
+        <div className="grid gap-5 md:grid-cols-2">
+          {mainFields.map((field) => (
+            <FieldRenderer
+              key={field.name}
+              field={field}
+              value={record?.[field.name]}
+              error={state.fieldErrors?.[field.name]}
+            />
+          ))}
 
-        {/* كلمة المرور حقل خاص بمستخدمي اللوحة ولا يُقرأ من القاعدة */}
-        {resource === "users" ? (
-          <TextInput
-            id="password"
-            name="password"
-            label={id ? "كلمة مرور جديدة" : "كلمة المرور"}
-            type="password"
-            autoComplete="new-password"
-            required={!id}
-            optional={Boolean(id)}
-            error={state.fieldErrors?.password}
-            help={
-              id
-                ? "اتركها فارغة للإبقاء على كلمة المرور الحالية."
-                : "١٠ أحرف على الأقل. استخدم كلمة مرور فريدة لا تستخدمها في مكان آخر."
-            }
-          />
-        ) : null}
-      </div>
+          {/* كلمة المرور حقل خاص بمستخدمي اللوحة ولا يُقرأ من القاعدة */}
+          {resource === "users" ? (
+            <TextInput
+              id="password"
+              name="password"
+              label={id ? "كلمة مرور جديدة" : "كلمة المرور"}
+              type="password"
+              autoComplete="new-password"
+              required={!id}
+              optional={Boolean(id)}
+              error={state.fieldErrors?.password}
+              help={
+                id
+                  ? "اتركها فارغة للإبقاء على كلمة المرور الحالية."
+                  : "١٠ أحرف على الأقل. استخدم كلمة مرور فريدة لا تستخدمها في مكان آخر."
+              }
+            />
+          ) : null}
+        </div>
+      </FormSection>
 
-      <div className="border-border flex flex-wrap gap-3 border-t pt-6">
-        <SubmitButton isEdit={Boolean(id)} />
-        <ButtonLink href={listHref} variant="outline">
-          إلغاء
-        </ButtonLink>
-      </div>
+      {seoFields.length > 0 ? (
+        <FormSection
+          id="seo"
+          title="تحسين محركات البحث"
+          defaultOpen={false}
+          summary="عنوان ووصف نتائج البحث"
+        >
+          <div className="grid gap-5 md:grid-cols-2">
+            {seoFields.map((field) => (
+              <FieldRenderer
+                key={field.name}
+                field={field}
+                value={record?.[field.name]}
+                error={state.fieldErrors?.[field.name]}
+              />
+            ))}
+          </div>
+        </FormSection>
+      ) : null}
+
+      <SaveBar
+        submit
+        saveLabel={id ? "حفظ التعديلات" : "إضافة"}
+        cancelHref={listHref}
+        errorCount={errorCount}
+      />
     </form>
-  );
-}
-
-function SubmitButton({ isEdit }: { isEdit: boolean }) {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button type="submit" size="lg" disabled={pending} icon={pending ? undefined : "check"}>
-      {pending ? "جارٍ الحفظ…" : isEdit ? "حفظ التعديلات" : "إضافة"}
-    </Button>
   );
 }
 
