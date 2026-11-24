@@ -47,8 +47,7 @@ const recent: SecurityEvent[] = [];
 
 /** يزيل المحارف التحكمية (منع حقن أسطر سجلّ مزيّفة) ويقصّ الطول. */
 function clean(value: string, max = 200): string {
-  // eslint-disable-next-line no-control-regex
-  return value.replace(/[\u0000-\u001f\u007f  ]+/g, " ").slice(0, max);
+  return value.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").slice(0, max);
 }
 
 /** a***@example.com + بصمة — لا يكشف البريد كاملًا. */

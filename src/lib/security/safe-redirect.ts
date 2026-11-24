@@ -13,7 +13,6 @@ export function safeAdminNext(value: unknown): string {
   if (typeof value !== "string" || value.length === 0 || value.length > 500) return FALLBACK;
 
   // محارف تحكمية أو باك-سلاش: يفسّرها المتصفّح بطرق مختلفة عن الخادم
-  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f\\]/.test(value)) return FALLBACK;
   if (!value.startsWith("/") || value.startsWith("//")) return FALLBACK;
 

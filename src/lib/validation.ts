@@ -93,7 +93,6 @@ export const attachmentSchema = z.object({
     .min(1)
     .max(255)
     // محارف التحكم تفسد السجلّات والعرض
-    // eslint-disable-next-line no-control-regex
     .transform((value) => value.replace(/[\u0000-\u001f\u007f]/g, " ")),
   url: z.string().trim().max(300).regex(UPLOAD_URL_PATTERN, "رابط المرفق غير صالح"),
   size: z.number().int().nonnegative().max(MAX_DESIGN_SIZE),

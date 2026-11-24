@@ -5,6 +5,12 @@ import { Suspense } from "react";
 import { LoginForm } from "@/app/admin/login/LoginForm";
 import { brand } from "@/config/brand";
 
+/*
+ * ديناميكية عمدًا: CSP لوحة الإدارة يعتمد nonce يُولَّد لكل طلب في src/proxy.ts،
+ * والصفحة الساكنة المولَّدة وقت البناء لا تحمل nonce فتُحجب سكربتاتها.
+ */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "تسجيل الدخول — لوحة التحكم",
   robots: { index: false, follow: false },

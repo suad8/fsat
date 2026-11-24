@@ -182,7 +182,6 @@ function randomName(extension: string): string {
 function safeDisplayName(name: string): string {
   return name
     // محارف تحكم + محارف اتجاه تُستعمل لانتحال الامتداد (مثل ‮)
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
     .replace(/[/\\]/g, "-")
     .trim()
