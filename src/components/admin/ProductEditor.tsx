@@ -5,9 +5,19 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { saveProductAction } from "@/app/admin/(dashboard)/actions/product";
-import { AdminCard } from "@/components/admin/AdminUi";
+import { useToast } from "@/components/admin/Feedback";
+import {
+  focusFirstInvalid,
+  FormSection,
+  REQUIRED_MESSAGE,
+  SaveBar,
+  SectionsToggle,
+  useDirty,
+  useSaveShortcut,
+  useUnsavedWarning,
+} from "@/components/admin/FormKit";
 import { Alert } from "@/components/ui/Alert";
-import { Button, ButtonLink, IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Checkbox, Select, TextArea, TextInput } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import {
@@ -56,36 +66,79 @@ export function ProductEditor({
   services: { id: string; title: string }[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [draft, setDraft] = useState<ProductDraft>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
+  const [showErrors, setShowErrors] = useState(false);
+  const { dirty, markSaved } = useDirty(draft);
+  const [saved, setSaved] = useState(false);
+
+  useUnsavedWarning(dirty && !saved);
 
   function patch(changes: Partial<ProductDraft>) {
     setDraft((current) => ({ ...current, ...changes }));
   }
 
+  /*
+   * التحقق المرئي: الحقول الإلزامية تُحسب دائمًا لكنها لا تُعرض إلا بعد أول
+   * محاولة حفظ — لا نصرخ في وجه المستخدم قبل أن يبدأ الكتابة.
+   */
+  const required: { id: string; section: string; message: string; bad: boolean }[] = [
+    { id: "name", section: "basics", message: REQUIRED_MESSAGE, bad: !draft.name.trim() },
+    { id: "slug", section: "basics", message: REQUIRED_MESSAGE, bad: !(draft.slug || slugify(draft.name)).trim() },
+    { id: "categoryId", section: "basics", message: "اختر القسم الذي ينتمي إليه المنتج", bad: !draft.categoryId },
+    { id: "unit", section: "pricing", message: REQUIRED_MESSAGE, bad: !draft.unit.trim() },
+    {
+      id: "basePrice",
+      section: "pricing",
+      message: "أدخل سعرًا أكبر من صفر أو غيّر الطريقة إلى «عرض سعر فقط»",
+      bad: draft.priceMode !== "QUOTE_ONLY" && !(draft.basePrice > 0),
+    },
+  ];
+  const errorFor = (id: string) =>
+    showErrors ? required.find((rule) => rule.id === id && rule.bad)?.message : undefined;
+  const invalidIn = (section: string) =>
+    showErrors ? required.filter((rule) => rule.section === section && rule.bad).length : 0;
+  const invalidTotal = showErrors ? required.filter((rule) => rule.bad).length : 0;
+
   function handleSave() {
+    if (pending) return;
     setError(null);
     setIssues([]);
 
+    const firstBad = required.filter((rule) => rule.bad);
+    if (firstBad.length > 0) {
+      setShowErrors(true);
+      toast.error("أكمل الحقول المطلوبة", `${firstBad.length} حقل يحتاج مراجعة قبل الحفظ.`);
+      // ننتظر فتح الأقسام المطويّة ثم نركّز على أول حقل
+      window.setTimeout(() => focusFirstInvalid(firstBad.map((rule) => rule.id)), 60);
+      return;
+    }
+
+    const sent = { ...draft, slug: draft.slug || slugify(draft.name) };
+
     startTransition(async () => {
-      const result = await saveProductAction({
-        ...draft,
-        slug: draft.slug || slugify(draft.name),
-      });
+      const result = await saveProductAction(sent);
 
       if (!result.ok) {
         setError(result.error);
         setIssues(result.issues ?? []);
+        toast.error("تعذّر حفظ المنتج", result.error);
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
+      markSaved(draft);
+      setSaved(true);
+      toast.success(draft.id ? "تم حفظ التعديلات" : "تمت إضافة المنتج");
       router.push("/admin/products");
       router.refresh();
     });
   }
+
+  useSaveShortcut(handleSave);
 
   const isQuoteOnly = draft.priceMode === "QUOTE_ONLY";
 
@@ -104,11 +157,16 @@ export function ProductEditor({
         </Alert>
       ) : null}
 
+      <div className="flex justify-end">
+        <SectionsToggle />
+      </div>
+
       {/* --- الأساسيات --- */}
-      <AdminCard title="بيانات المنتج">
+      <FormSection id="basics" title="بيانات المنتج" description="الاسم والقسم والوصف كما يراها الزائر." invalidCount={invalidIn("basics")}>
         <div className="grid gap-5 md:grid-cols-2">
           <TextInput
             id="name"
+            error={errorFor("name")}
             label="اسم المنتج"
             required
             value={draft.name}
@@ -124,6 +182,7 @@ export function ProductEditor({
 
           <TextInput
             id="slug"
+            error={errorFor("slug")}
             label="الرابط (slug)"
             required
             value={draft.slug}
@@ -133,6 +192,7 @@ export function ProductEditor({
 
           <Select
             id="categoryId"
+            error={errorFor("categoryId")}
             label="القسم"
             required
             value={draft.categoryId}
@@ -212,12 +272,19 @@ export function ProductEditor({
             />
           </div>
         </div>
-      </AdminCard>
+      </FormSection>
 
       {/* --- التسعير --- */}
-      <AdminCard
+      <FormSection
+        id="pricing"
         title="التسعير"
         description="اختر طريقة التسعير ثم اضبط السعر الأساسي وشرائح الكميات."
+        invalidCount={invalidIn("pricing")}
+        summary={
+          draft.priceMode === "QUOTE_ONLY"
+            ? "عرض سعر فقط"
+            : `${draft.basePrice} / ${draft.unit} · ${draft.quantityTiers.length} شريحة`
+        }
       >
         <div className="grid gap-5 md:grid-cols-3">
           <Select
@@ -236,6 +303,7 @@ export function ProductEditor({
 
           <TextInput
             id="unit"
+            error={errorFor("unit")}
             label="وحدة البيع"
             required
             value={draft.unit}
@@ -245,6 +313,7 @@ export function ProductEditor({
 
           <TextInput
             id="basePrice"
+            error={errorFor("basePrice")}
             label="سعر الوحدة الأساسي"
             type="number"
             step="0.01"
@@ -300,29 +369,33 @@ export function ProductEditor({
             onChange={(quantityTiers) => patch({ quantityTiers })}
           />
         )}
-      </AdminCard>
+      </FormSection>
 
       {/* --- الصور --- */}
-      <AdminCard
+      <FormSection
+        id="images"
         title="صور المنتج"
         description="الصورة الأولى هي الصورة الرئيسية في بطاقة المنتج ونتائج البحث."
+        summary={draft.images.length > 0 ? `${draft.images.length} صورة` : "لا توجد صور — المنتج لن يظهر بشكل جذاب"}
       >
         <ImageEditor images={draft.images} onChange={(images) => patch({ images })} />
-      </AdminCard>
+      </FormSection>
 
       {/* --- الخيارات --- */}
-      <AdminCard
+      <FormSection
+        id="options"
         title="خيارات المنتج"
         description="المقاس، الخامة، اللون، نوع الطباعة، التشطيب… كل مجموعة تؤثر على السعر حسب إعدادها."
+        summary={`${draft.optionGroups.length} مجموعة خيارات`}
       >
         <OptionsEditor
           groups={draft.optionGroups}
           onChange={(optionGroups) => patch({ optionGroups })}
         />
-      </AdminCard>
+      </FormSection>
 
       {/* --- الربط والسيو --- */}
-      <AdminCard title="الربط وتحسين محركات البحث">
+      <FormSection id="links" title="الربط وتحسين محركات البحث" defaultOpen={false} summary="الخدمات المرتبطة وعنوان ووصف البحث">
         <div className="space-y-5">
           <fieldset>
             <legend className="text-primary-800 mb-2.5 text-sm font-bold">
@@ -367,16 +440,17 @@ export function ProductEditor({
             />
           </div>
         </div>
-      </AdminCard>
+      </FormSection>
 
-      <div className="border-border bg-surface sticky bottom-0 flex flex-wrap gap-3 border-t p-4">
-        <Button size="lg" onClick={handleSave} disabled={pending} icon={pending ? undefined : "check"}>
-          {pending ? "جارٍ الحفظ…" : draft.id ? "حفظ التعديلات" : "إضافة المنتج"}
-        </Button>
-        <ButtonLink href="/admin/products" variant="outline" size="lg">
-          إلغاء
-        </ButtonLink>
-      </div>
+      <SaveBar
+        pending={pending}
+        dirty={draft.id ? dirty : undefined}
+        onSave={handleSave}
+        saveLabel={draft.id ? "حفظ التعديلات" : "إضافة المنتج"}
+        cancelHref="/admin/products"
+        errorCount={invalidTotal}
+        onShowErrors={() => focusFirstInvalid(required.filter((rule) => rule.bad).map((rule) => rule.id))}
+      />
     </div>
   );
 }

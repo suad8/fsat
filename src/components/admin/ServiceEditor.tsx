@@ -4,11 +4,21 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { saveServiceAction } from "@/app/admin/(dashboard)/actions/content";
-import { AdminCard } from "@/components/admin/AdminUi";
+import { useToast } from "@/components/admin/Feedback";
+import {
+  focusFirstInvalid,
+  FormSection,
+  REQUIRED_MESSAGE,
+  SaveBar,
+  SectionsToggle,
+  useDirty,
+  useSaveShortcut,
+  useUnsavedWarning,
+} from "@/components/admin/FormKit";
 import { GalleryEditor } from "@/components/admin/GalleryEditor";
 import { ImageField } from "@/components/admin/ImageField";
 import { Alert } from "@/components/ui/Alert";
-import { Button, ButtonLink, IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Checkbox, Select, TextArea, TextInput } from "@/components/ui/Field";
 import type { ServiceDraft } from "@/lib/admin/drafts";
 import { slugify } from "@/lib/utils";
@@ -41,18 +51,42 @@ export function ServiceEditor({
   products: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [draft, setDraft] = useState<ServiceDraft>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
+  const [showErrors, setShowErrors] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const { dirty, markSaved } = useDirty(draft);
+
+  useUnsavedWarning(dirty && !saved);
 
   function patch(changes: Partial<ServiceDraft>) {
     setDraft((current) => ({ ...current, ...changes }));
   }
 
+  const required = [
+    { id: "title", bad: !draft.title.trim(), message: REQUIRED_MESSAGE },
+    { id: "slug", bad: !(draft.slug || slugify(draft.title)).trim(), message: REQUIRED_MESSAGE },
+    { id: "shortDescription", bad: !draft.shortDescription.trim(), message: REQUIRED_MESSAGE },
+  ];
+  const errorFor = (id: string) =>
+    showErrors ? required.find((rule) => rule.id === id && rule.bad)?.message : undefined;
+  const invalidTotal = showErrors ? required.filter((rule) => rule.bad).length : 0;
+
   function save() {
+    if (pending) return;
     setError(null);
     setIssues([]);
+
+    const bad = required.filter((rule) => rule.bad);
+    if (bad.length > 0) {
+      setShowErrors(true);
+      toast.error("أكمل الحقول المطلوبة", `${bad.length} حقل يحتاج مراجعة قبل الحفظ.`);
+      window.setTimeout(() => focusFirstInvalid(bad.map((rule) => rule.id)), 60);
+      return;
+    }
 
     startTransition(async () => {
       const result = await saveServiceAction({
@@ -65,14 +99,20 @@ export function ServiceEditor({
       if (!result.ok) {
         setError(result.error);
         setIssues(result.issues ?? []);
+        toast.error("تعذّر حفظ الخدمة", result.error);
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
+      markSaved(draft);
+      setSaved(true);
+      toast.success(draft.id ? "تم حفظ التعديلات" : "تمت إضافة الخدمة");
       router.push("/admin/services");
       router.refresh();
     });
   }
+
+  useSaveShortcut(save);
 
   return (
     <div className="space-y-6">
@@ -89,10 +129,15 @@ export function ServiceEditor({
         </Alert>
       ) : null}
 
-      <AdminCard title="بيانات الخدمة">
+      <div className="flex justify-end">
+        <SectionsToggle />
+      </div>
+
+      <FormSection id="basics" title="بيانات الخدمة" description="الاسم والوصف كما تراها الزائر." invalidCount={invalidTotal}>
         <div className="grid gap-5 md:grid-cols-2">
           <TextInput
             id="title"
+            error={errorFor("title")}
             label="عنوان الخدمة"
             required
             value={draft.title}
@@ -110,6 +155,7 @@ export function ServiceEditor({
 
           <TextInput
             id="slug"
+            error={errorFor("slug")}
             label="الرابط (slug)"
             required
             value={draft.slug}
@@ -118,6 +164,7 @@ export function ServiceEditor({
 
           <TextArea
             id="shortDescription"
+            error={errorFor("shortDescription")}
             label="وصف مختصر"
             required
             rows={2}
@@ -193,11 +240,13 @@ export function ServiceEditor({
             onChange={(event) => patch({ isFeatured: event.target.checked })}
           />
         </div>
-      </AdminCard>
+      </FormSection>
 
-      <AdminCard
+      <FormSection
+        id="highlights"
         title="مميّزات الخدمة"
         description="نقاط قصيرة تُعرض كقائمة في صفحة الخدمة."
+        summary={`${draft.highlights.filter(Boolean).length} نقطة`}
       >
         <ul className="space-y-2.5">
           {draft.highlights.map((highlight, index) => (
@@ -238,18 +287,18 @@ export function ServiceEditor({
         >
           إضافة نقطة
         </Button>
-      </AdminCard>
+      </FormSection>
 
-      <AdminCard title="نماذج من التنفيذ">
+      <FormSection id="gallery" title="نماذج من التنفيذ" summary={`${draft.images.length} صورة`}>
         <GalleryEditor
           images={draft.images}
           onChange={(images) => patch({ images })}
           folder="services"
           label="صور الخدمة"
         />
-      </AdminCard>
+      </FormSection>
 
-      <AdminCard title="المنتجات المرتبطة وتحسين محركات البحث">
+      <FormSection id="links" title="المنتجات المرتبطة وتحسين محركات البحث" defaultOpen={false} summary="المنتجات المرتبطة وعنوان ووصف البحث">
         <fieldset className="mb-5">
           <legend className="text-primary-800 mb-2.5 text-sm font-bold">
             المنتجات التي تظهر أسفل صفحة الخدمة
@@ -295,16 +344,17 @@ export function ServiceEditor({
             onChange={(event) => patch({ seoDescription: event.target.value })}
           />
         </div>
-      </AdminCard>
+      </FormSection>
 
-      <div className="border-border bg-surface sticky bottom-0 flex flex-wrap gap-3 border-t p-4">
-        <Button size="lg" onClick={save} disabled={pending} icon={pending ? undefined : "check"}>
-          {pending ? "جارٍ الحفظ…" : draft.id ? "حفظ التعديلات" : "إضافة الخدمة"}
-        </Button>
-        <ButtonLink href="/admin/services" variant="outline" size="lg">
-          إلغاء
-        </ButtonLink>
-      </div>
+      <SaveBar
+        pending={pending}
+        dirty={draft.id ? dirty : undefined}
+        onSave={save}
+        saveLabel={draft.id ? "حفظ التعديلات" : "إضافة الخدمة"}
+        cancelHref="/admin/services"
+        errorCount={invalidTotal}
+        onShowErrors={() => focusFirstInvalid(required.filter((rule) => rule.bad).map((rule) => rule.id))}
+      />
     </div>
   );
 }
