@@ -5,15 +5,17 @@ import path from "node:path";
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth";
+import { getAdminContext } from "@/lib/data/admin-context";
+import { logAudit } from "@/lib/data/audit";
 import { prisma } from "@/lib/prisma";
 
 /** حذف صورة من المكتبة ومن القرص. */
 export async function deleteMediaAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  let ctx;
   try {
-    await requireAdmin();
+    ctx = await getAdminContext();
   } catch {
     return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
   }
@@ -56,6 +58,16 @@ export async function deleteMediaAction(
     }
 
     await prisma.mediaAsset.delete({ where: { id } });
+
+    await logAudit({
+      actor: ctx.actor,
+      action: "DELETE",
+      entity: "MediaAsset",
+      entityId: id,
+      summary: `حذف ملف من المكتبة (${asset.originalName})`,
+      changes: { url: asset.url, size: asset.size },
+      ip: ctx.ip,
+    });
   } catch (error) {
     console.error("[admin] فشل حذف الصورة:", error);
     return { ok: false, error: "تعذّر حذف الصورة." };
@@ -71,7 +83,7 @@ export async function updateMediaAltAction(
   alt: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await getAdminContext();
   } catch {
     return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
   }

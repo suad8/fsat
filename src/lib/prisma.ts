@@ -46,9 +46,9 @@ function loadPostgresAdapter(url: string) {
   // البناء أو التحليل الساكن بسببها.
   const nodeRequire = createRequire(path.join(process.cwd(), "package.json"));
 
-  let module: { PrismaPg: new (config: { connectionString: string }) => unknown };
+  let adapterModule: { PrismaPg: new (config: { connectionString: string }) => unknown };
   try {
-    module = nodeRequire("@prisma/adapter-pg");
+    adapterModule = nodeRequire("@prisma/adapter-pg");
   } catch {
     throw new Error(
       "DATABASE_URL يشير إلى PostgreSQL لكن @prisma/adapter-pg غير مثبّت. " +
@@ -56,7 +56,7 @@ function loadPostgresAdapter(url: string) {
     );
   }
 
-  return new module.PrismaPg({ connectionString: url });
+  return new adapterModule.PrismaPg({ connectionString: url });
 }
 
 /**

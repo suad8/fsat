@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAdmin } from "@/lib/auth";
+import { getAdminContext } from "@/lib/data/admin-context";
+import { diffRecords, writeAudit } from "@/lib/data/audit";
 import { prisma } from "@/lib/prisma";
 import { isThemeFont, parseHex, THEME_RADII } from "@/lib/theme";
 
@@ -28,8 +29,9 @@ const themeSchema = z.object({
 });
 
 export async function saveThemeAction(payload: unknown): Promise<Result> {
+  let ctx;
   try {
-    await requireAdmin();
+    ctx = await getAdminContext();
   } catch {
     return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
   }
@@ -41,27 +43,39 @@ export async function saveThemeAction(payload: unknown): Promise<Result> {
 
   const data = parsed.data;
 
-  try {
-    const existing = await prisma.siteSettings.findUnique({ where: { id: "singleton" } });
+  const theme = {
+    themePrimary: data.primary,
+    themeAccent: data.accent,
+    themeBrand: data.brand,
+    themeFont: data.font,
+    themeRadius: data.radius,
+  };
 
-    await prisma.siteSettings.upsert({
-      where: { id: "singleton" },
-      update: {
-        themePrimary: data.primary,
-        themeAccent: data.accent,
-        themeBrand: data.brand,
-        themeFont: data.font,
-        themeRadius: data.radius,
-      },
-      create: {
-        id: "singleton",
-        companyName: existing?.companyName ?? "المنشأة",
-        themePrimary: data.primary,
-        themeAccent: data.accent,
-        themeBrand: data.brand,
-        themeFont: data.font,
-        themeRadius: data.radius,
-      },
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.siteSettings.findUnique({ where: { id: "singleton" } });
+
+      await tx.siteSettings.upsert({
+        where: { id: "singleton" },
+        update: theme,
+        create: { id: "singleton", companyName: existing?.companyName ?? "المنشأة", ...theme },
+      });
+
+      const changes = diffRecords(existing, theme);
+      if (changes) {
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "SETTINGS_CHANGE",
+            entity: "SiteSettings",
+            entityId: "singleton",
+            summary: "تعديل ثيم الموقع (الألوان/الخط/الانحناء)",
+            changes,
+            ip: ctx.ip,
+          },
+          tx,
+        );
+      }
     });
   } catch (error) {
     console.error("[theme] فشل حفظ الثيم:", error);
@@ -85,8 +99,9 @@ const sectionsSchema = z.array(
 );
 
 export async function saveSectionsAction(payload: unknown): Promise<Result> {
+  let ctx;
   try {
-    await requireAdmin();
+    ctx = await getAdminContext();
   } catch {
     return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
   }
@@ -99,20 +114,41 @@ export async function saveSectionsAction(payload: unknown): Promise<Result> {
   try {
     // المفاتيح موجودة مسبقًا (تُنشأ من التهيئة)، فنحدّث فقط ولا ننشئ مفاتيح
     // جديدة من مدخلات المستخدم — القسم بلا مكوّن في الكود لن يُرسم
-    await prisma.$transaction(
-      parsed.data.map((section) =>
-        prisma.homeSection.updateMany({
-          where: { key: section.key },
-          data: {
-            isActive: section.isActive,
-            order: section.order,
-            eyebrow: section.eyebrow || null,
-            title: section.title || null,
-            description: section.description || null,
+    await prisma.$transaction(async (tx) => {
+      const before = await tx.homeSection.findMany();
+      const previous = new Map(before.map((section) => [section.key, section]));
+
+      const changes: Record<string, unknown> = {};
+
+      for (const section of parsed.data) {
+        const next = {
+          isActive: section.isActive,
+          order: section.order,
+          eyebrow: section.eyebrow || null,
+          title: section.title || null,
+          description: section.description || null,
+        };
+
+        await tx.homeSection.updateMany({ where: { key: section.key }, data: next });
+
+        const diff = diffRecords(previous.get(section.key), next);
+        if (diff) changes[section.key] = diff;
+      }
+
+      if (Object.keys(changes).length > 0) {
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "UPDATE",
+            entity: "HomeSection",
+            summary: `تعديل أقسام الصفحة الرئيسية (${Object.keys(changes).join("، ")})`,
+            changes,
+            ip: ctx.ip,
           },
-        }),
-      ),
-    );
+          tx,
+        );
+      }
+    });
   } catch (error) {
     console.error("[theme] فشل حفظ الأقسام:", error);
     return { ok: false, error: "تعذّر حفظ ترتيب الأقسام." };

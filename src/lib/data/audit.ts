@@ -76,7 +76,7 @@ export async function logAudit(entry: AuditEntry, db: DbClient = prisma): Promis
 /** حقول لا تُكتب في السجلّ أبدًا. */
 const SECRET_FIELDS = new Set(["passwordHash", "password", "token", "secret"]);
 
-const MAX_VALUE_LENGTH = 300;
+const MAX_VALUE_LENGTH = 1000;
 
 function comparable(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString();

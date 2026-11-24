@@ -51,6 +51,12 @@ export type Settings = {
   payment: PaymentSettings;
   defaultSeoTitle: string;
   defaultSeoDescription: string;
+  /**
+   * true حين يعتمد الجوال/الواتساب على قيم الهوية المؤقتة (src/config/brand.ts)
+   * لأن الإدارة لم تُدخل أرقامها بعد. الواجهات التي تعرض أزرار اتصال/واتساب
+   * يجدر بها إخفاؤها أو تنبيه الإدارة بدل توجيه العميل لرقم غير حقيقي.
+   */
+  contactIsPlaceholder: boolean;
 };
 
 const FALLBACK: Settings = {
@@ -82,6 +88,7 @@ const FALLBACK: Settings = {
   },
   defaultSeoTitle: `${brand.name} | ${brand.taglineSecondary}`,
   defaultSeoDescription: brand.description,
+  contactIsPlaceholder: true,
 };
 
 /** يزيل وسم "[[يحتاج استبدال]]" من القيم المخزّنة قبل عرضها للزائر. */
@@ -99,6 +106,11 @@ export const getSettings = cache(async (): Promise<Settings> => {
     const socialLinks = (record.social ?? {}) as SocialLinks;
     const payment = (record.paymentSettings ?? {}) as Partial<PaymentSettings>;
     const phone = clean(record.phone, FALLBACK.phone);
+    const whatsapp = clean(record.whatsapp, FALLBACK.whatsapp).replace(/\D/g, "");
+    const vatRate =
+      Number.isFinite(record.vatRate) && record.vatRate >= 0 && record.vatRate <= 1
+        ? record.vatRate
+        : FALLBACK.vatRate;
 
     return {
       companyName: clean(record.companyName, FALLBACK.companyName),
@@ -106,7 +118,7 @@ export const getSettings = cache(async (): Promise<Settings> => {
       description: clean(record.description, FALLBACK.description),
       phone,
       phoneDisplay: formatPhoneDisplay(phone),
-      whatsapp: clean(record.whatsapp, FALLBACK.whatsapp).replace(/\D/g, ""),
+      whatsapp,
       email: clean(record.email, FALLBACK.email),
       landline: clean(record.landline, FALLBACK.landline),
       addressLine: clean(record.addressLine, FALLBACK.addressLine),
@@ -118,7 +130,7 @@ export const getSettings = cache(async (): Promise<Settings> => {
       social: socialLinks,
       vatNumber: record.vatNumber ?? "",
       crNumber: record.crNumber ?? "",
-      vatRate: record.vatRate,
+      vatRate,
       pricesIncludeVat: record.pricesIncludeVat,
       payment: {
         bankTransfer: payment.bankTransfer ?? true,
@@ -132,6 +144,9 @@ export const getSettings = cache(async (): Promise<Settings> => {
         record.defaultSeoDescription,
         FALLBACK.defaultSeoDescription,
       ),
+      contactIsPlaceholder:
+        contact.needsReplacement &&
+        (phone === FALLBACK.phone || whatsapp === FALLBACK.whatsapp),
     };
   } catch {
     // قبل تشغيل الترحيل أو عند تعذّر الاتصال — الموقع يظل يعمل بقيم الهوية

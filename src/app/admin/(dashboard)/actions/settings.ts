@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAdmin } from "@/lib/auth";
+import { getAdminContext } from "@/lib/data/admin-context";
+import { diffRecords, writeAudit } from "@/lib/data/audit";
 import { prisma } from "@/lib/prisma";
 
 /** حفظ بيانات المنشأة وإعدادات الضريبة والدفع وتحسين محركات البحث. */
@@ -92,8 +93,9 @@ export async function saveSeoDefaultsAction(
   _previous: SettingsState,
   form: FormData,
 ): Promise<SettingsState> {
+  let ctx;
   try {
-    await requireAdmin();
+    ctx = await getAdminContext();
   } catch {
     return { error: "انتهت جلستك. أعد تسجيل الدخول." };
   }
@@ -113,20 +115,35 @@ export async function saveSeoDefaultsAction(
   }
 
   try {
-    const existing = await prisma.siteSettings.findUnique({ where: { id: "singleton" } });
+    const seo = {
+      defaultSeoTitle: parsed.data.defaultSeoTitle || null,
+      defaultSeoDescription: parsed.data.defaultSeoDescription || null,
+    };
 
-    await prisma.siteSettings.upsert({
-      where: { id: "singleton" },
-      update: {
-        defaultSeoTitle: parsed.data.defaultSeoTitle || null,
-        defaultSeoDescription: parsed.data.defaultSeoDescription || null,
-      },
-      create: {
-        id: "singleton",
-        companyName: existing?.companyName ?? "المنشأة",
-        defaultSeoTitle: parsed.data.defaultSeoTitle || null,
-        defaultSeoDescription: parsed.data.defaultSeoDescription || null,
-      },
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.siteSettings.findUnique({ where: { id: "singleton" } });
+
+      await tx.siteSettings.upsert({
+        where: { id: "singleton" },
+        update: seo,
+        create: { id: "singleton", companyName: existing?.companyName ?? "المنشأة", ...seo },
+      });
+
+      const changes = diffRecords(existing, seo);
+      if (changes) {
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "SETTINGS_CHANGE",
+            entity: "SiteSettings",
+            entityId: "singleton",
+            summary: "تعديل إعدادات SEO الافتراضية",
+            changes,
+            ip: ctx.ip,
+          },
+          tx,
+        );
+      }
     });
   } catch (error) {
     console.error("[admin] فشل حفظ إعدادات SEO:", error);
@@ -139,9 +156,22 @@ export async function saveSeoDefaultsAction(
   return { ok: true };
 }
 
+/** حقول إعدادات حسّاسة يُذكر تغييرها صراحةً في ملخّص سجلّ التدقيق. */
+const SENSITIVE_SETTINGS = [
+  "vatRate",
+  "pricesIncludeVat",
+  "vatNumber",
+  "crNumber",
+  "paymentSettings",
+  "phone",
+  "whatsapp",
+  "email",
+] as const;
+
 export async function saveSettingsAction(payload: unknown): Promise<SettingsState> {
+  let ctx;
   try {
-    await requireAdmin();
+    ctx = await getAdminContext();
   } catch {
     return { error: "انتهت جلستك. أعد تسجيل الدخول." };
   }
@@ -165,45 +195,66 @@ export async function saveSettingsAction(payload: unknown): Promise<SettingsStat
     Object.entries(data.social).filter(([, value]) => value && value.trim().length > 0),
   );
 
+  const values = {
+    companyName: data.companyName,
+    tagline: data.tagline || null,
+    description: data.description || null,
+    phone: data.phone || null,
+    whatsapp: data.whatsapp?.replace(/\D/g, "") || null,
+    landline: data.landline || null,
+    email: data.email || null,
+    addressLine: data.addressLine || null,
+    city: data.city || null,
+    mapUrl: data.mapUrl || null,
+    workingHours: data.workingHours || null,
+    vatNumber: data.vatNumber?.replace(/\s/g, "") || null,
+    crNumber: data.crNumber || null,
+    vatRate: data.vatRate,
+    pricesIncludeVat: data.pricesIncludeVat,
+    social,
+    paymentSettings: {
+      bankTransfer: data.bankTransfer,
+      online: data.onlinePayment,
+      cod: data.cod,
+      onPickup: data.onPickup,
+      bankAccounts: data.bankAccounts,
+    },
+    defaultSeoTitle: data.defaultSeoTitle || null,
+    defaultSeoDescription: data.defaultSeoDescription || null,
+    logoUrl: data.logoUrl || null,
+    logoWhiteUrl: data.logoWhiteUrl || null,
+  };
+
   try {
-    await prisma.siteSettings.upsert({
-      where: { id: "singleton" },
-      update: {
-        companyName: data.companyName,
-        tagline: data.tagline || null,
-        description: data.description || null,
-        phone: data.phone || null,
-        whatsapp: data.whatsapp?.replace(/\D/g, "") || null,
-        landline: data.landline || null,
-        email: data.email || null,
-        addressLine: data.addressLine || null,
-        city: data.city || null,
-        mapUrl: data.mapUrl || null,
-        workingHours: data.workingHours || null,
-        vatNumber: data.vatNumber?.replace(/\s/g, "") || null,
-        crNumber: data.crNumber || null,
-        vatRate: data.vatRate,
-        pricesIncludeVat: data.pricesIncludeVat,
-        social,
-        paymentSettings: {
-          bankTransfer: data.bankTransfer,
-          online: data.onlinePayment,
-          cod: data.cod,
-          onPickup: data.onPickup,
-          bankAccounts: data.bankAccounts,
-        },
-        defaultSeoTitle: data.defaultSeoTitle || null,
-        defaultSeoDescription: data.defaultSeoDescription || null,
-        logoUrl: data.logoUrl || null,
-        logoWhiteUrl: data.logoWhiteUrl || null,
-      },
-      create: {
-        id: "singleton",
-        companyName: data.companyName,
-        vatRate: data.vatRate,
-        pricesIncludeVat: data.pricesIncludeVat,
-        social,
-      },
+    await prisma.$transaction(async (tx) => {
+      const before = await tx.siteSettings.findUnique({ where: { id: "singleton" } });
+
+      await tx.siteSettings.upsert({
+        where: { id: "singleton" },
+        update: values,
+        // الإنشاء بكل الحقول (لا بنصفها) حتى لا تضيع بيانات إن غاب السجل
+        create: { id: "singleton", ...values },
+      });
+
+      const changes = diffRecords(before, values);
+      if (changes) {
+        const sensitive = SENSITIVE_SETTINGS.filter((field) => field in changes);
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "SETTINGS_CHANGE",
+            entity: "SiteSettings",
+            entityId: "singleton",
+            summary:
+              sensitive.length > 0
+                ? `تعديل إعدادات المنشأة (حسّاسة: ${sensitive.join("، ")})`
+                : "تعديل إعدادات المنشأة",
+            changes,
+            ip: ctx.ip,
+          },
+          tx,
+        );
+      }
     });
   } catch (error) {
     console.error("[admin] فشل حفظ الإعدادات:", error);
