@@ -1,56 +1,58 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { CheckoutForm } from "@/components/checkout/CheckoutForm";
-import { PageHeader } from "@/components/site/PageHeader";
-import type { PaymentMethod } from "@/lib/constants";
-import { getShippingZones } from "@/lib/queries";
+import { CheckoutFlow } from "@/components/checkout/CheckoutFlow";
+import { ShopIcon } from "@/components/shop/ShopIcon";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { getSettings } from "@/lib/settings";
+import { listPaymentOptions } from "@/lib/shop/payments";
 
 export const metadata: Metadata = {
   title: "إتمام الطلب",
-  description: "أكمل بياناتك واختر طريقة الاستلام والدفع لإتمام طلبك.",
+  description: "أكمل بياناتك واختر طريقة الاستلام والدفع لإتمام طلبك كضيف دون تسجيل.",
   alternates: { canonical: "/checkout" },
   robots: { index: false, follow: false },
 };
 
 export default async function CheckoutPage() {
-  const [zones, settings] = await Promise.all([getShippingZones(), getSettings()]);
-
-  // طرق الدفع المفعّلة فقط — لا نعرض خيارًا لا يمكن للعميل إتمامه
-  const paymentMethods: PaymentMethod[] = [];
-  if (settings.payment.bankTransfer) paymentMethods.push("BANK_TRANSFER");
-  if (settings.payment.online) paymentMethods.push("ONLINE");
-  if (settings.payment.cod) paymentMethods.push("COD");
-  if (settings.payment.onPickup) paymentMethods.push("ON_PICKUP");
+  const settings = await getSettings();
 
   return (
     <>
-      <PageHeader
-        compact
-        tone="light"
-        eyebrow="الخطوة الأخيرة"
-        title="إتمام الطلب"
-        description="أكمل بياناتك واختر طريقة الاستلام والدفع. ستصلك رسالة تأكيد برقم طلبك فور الإرسال."
-        breadcrumbs={[
-          { label: "السلة", href: "/cart" },
-          { label: "إتمام الطلب", href: "/checkout" },
-        ]}
-      />
+      <div className="border-border bg-surface-muted border-b">
+        <div className="container-page flex flex-wrap items-center justify-between gap-3 py-3">
+          <Breadcrumbs
+            items={[
+              { label: "السلة", href: "/cart" },
+              { label: "إتمام الطلب", href: "/checkout" },
+            ]}
+          />
+          <p className="text-primary-600 flex items-center gap-2 text-xs font-medium">
+            <ShopIcon name="lock" className="text-accent-700 size-4" />
+            طلب كضيف — بلا تسجيل ولا كلمة مرور
+          </p>
+        </div>
+      </div>
 
-      <div className="container-page py-10 md:py-14">
-        <CheckoutForm
-          zones={zones.map((zone) => ({
-            id: zone.id,
-            name: zone.name,
-            cities: Array.isArray(zone.cities) ? (zone.cities as string[]) : [],
-            cost: zone.cost,
-            freeOverAmount: zone.freeOverAmount,
-            estimatedDays: zone.estimatedDays,
-          }))}
-          paymentMethods={paymentMethods}
-          pricesIncludeVat={settings.pricesIncludeVat}
-          vatRate={settings.vatRate}
-        />
+      <div className="bg-surface-muted/60">
+        <div className="container-page py-8 md:py-12">
+          <h1 className="mb-6 text-2xl font-black md:mb-8 md:text-4xl">إتمام الطلب</h1>
+          <CheckoutFlow
+            paymentOptions={listPaymentOptions(settings.payment)}
+            pickup={{
+              city: settings.city,
+              addressLine: settings.addressLine,
+              workingHours: settings.workingHours,
+            }}
+          />
+          <p className="text-primary-500 mt-10 text-xs">
+            عندك سؤال قبل التأكيد؟{" "}
+            <Link href="/contact" className="text-accent-800 font-bold underline underline-offset-2">
+              تواصل معنا
+            </Link>
+            .
+          </p>
+        </div>
       </div>
     </>
   );

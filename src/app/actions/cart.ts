@@ -77,6 +77,10 @@ export async function buildDefaultCartItem(
       flatFees: breakdown.flatFees,
       total: breakdown.total,
       options: describeSelection(groups, selection),
+      selection,
+      minQuantity: product.minQuantity,
+      quantityStep: product.quantityStep,
+      href: `/shop/${product.category.slug}/${product.slug}`,
     },
   };
 }

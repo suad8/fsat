@@ -50,6 +50,11 @@ export type CartItem = {
   total: number;
   options: CartItemOption[];
   notes?: string;
+  /**
+   * معرّفات القيم المختارة (مفتاح المجموعة ← معرّف القيمة). هذا ما يُرسل للخادم
+   * عند الطلب؛ `options` للعرض فقط. بنود قديمة بلا هذا الحقل تُطلب مراجعتها.
+   */
+  selection?: Record<string, string | string[]>;
   /** الحد الأدنى وخطوة الكمية — لتعمل أزرار +/− في السلة بمضاعفات صحيحة. */
   minQuantity?: number;
   quantityStep?: number;

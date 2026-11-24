@@ -41,7 +41,7 @@ export function useCartQuote(
       items: items.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
-        selection: Object.fromEntries(item.options.map((option) => [option.key, option.value])),
+        selection: item.selection ?? {},
       })),
       fulfillment: options.fulfillment,
       city: options.city || undefined,
