@@ -52,9 +52,9 @@ describe("findTier — شرائح الكمية", () => {
     expect(original).toEqual(copy);
   });
 
-  it("فجوة بين شريحتين ← لا شريحة داخل الفجوة (السعر الأساس)", () => {
+  it("فجوة بين شريحتين ← تبقى الشريحة السابقة سارية حتى تبدأ التالية", () => {
     const gapped = [tier(100, 199, 5), tier(500, null, 3)];
-    expect(findTier(gapped, 300)).toBeNull();
+    expect(findTier(gapped, 300)?.unitPrice).toBe(5);
   });
 
   it("قائمة فارغة ← null", () => {
@@ -90,7 +90,7 @@ describe("normalizeQuantity — الحد الأدنى والخطوة", () => {
     const p = { minQuantity: 50, quantityStep: 25 };
     expect(normalizeQuantity(p, 75)).toBe(75);
     expect(normalizeQuantity(p, 100)).toBe(100);
-    expect(normalizeQuantity(p, 60)).toBe(50);
+    expect(normalizeQuantity(p, 60)).toBe(75); // يُقرَّب للأعلى: لا تقلّ الكمية عمّا طلبه العميل
   });
 
   it("ناتجه دائمًا ≥ الحد الأدنى ويقع على الشبكة (خاصية على نطاق واسع)", () => {
@@ -115,12 +115,12 @@ describe("normalizeQuantity — الحد الأدنى والخطوة", () => {
    * عميل يكتب ١٢٠ استيكر لمنتج (حد أدنى ٥٠، خطوة ٥٠) يُسعَّر ويُطبع ١٠٠ فقط
    * بينما يتوقع ≥ ١٢٠. الأسلم Math.ceil. نوثّق السلوك الحالي هنا.
    */
-  it("[سلوك معروف] التقريب لأقرب خطوة قد ينقص الكمية المطلوبة", () => {
+  it("التقريب للأعلى: ١٢٠ مع (حد ٥٠، خطوة ٥٠) تصير ١٥٠ لا ١٠٠", () => {
     const p = { minQuantity: 50, quantityStep: 50 };
-    expect(normalizeQuantity(p, 120)).toBe(100); // طُلب ١٢٠ → ١٠٠
+    expect(normalizeQuantity(p, 120)).toBe(150);
   });
 
-  it.fails("[خطأ] لا يجوز أن تقلّ الكمية المعتمدة عن المطلوبة (ceil)", () => {
+  it("لا يجوز أن تقلّ الكمية المعتمدة عن المطلوبة (ceil)", () => {
     const p = { minQuantity: 50, quantityStep: 50 };
     expect(normalizeQuantity(p, 120)).toBeGreaterThanOrEqual(120);
   });
@@ -385,10 +385,10 @@ describe("calculatePrice — الخيارات الإلزامية", () => {
     expect(r.missingRequired).toEqual(["size"]);
   });
 
-  it("اختيار قيمة غير فعّالة لا يُرضي الإلزام", () => {
+  it("مجموعة إلزامية كل قيمها معطّلة لا تُحسب ناقصة (لا يُحبس العميل أمام خيار لا يمكنه اختياره)", () => {
     const g = group("size", [val("a", 0, "ADD_PER_UNIT", { isActive: false })], { isRequired: true });
     const r = calculatePrice(product({ optionGroups: [g] }), { size: "a" }, 1);
-    expect(r.missingRequired).toEqual(["size"]);
+    expect(r.missingRequired).toEqual([]);
   });
 
   it("مصفوفة فارغة لـ CHECKBOX إلزامي ← ناقص", () => {
@@ -398,9 +398,9 @@ describe("calculatePrice — الخيارات الإلزامية", () => {
     ]);
   });
 
-  it("الحقل النصي الإلزامي لا يُحسب ضمن missingRequired (التحقق في الواجهة)", () => {
+  it("الحقل النصي الإلزامي الفارغ يُحسب ناقصًا (التحقق على الخادم)", () => {
     const g = group("name", [], { type: "TEXT", isRequired: true });
-    expect(calculatePrice(product({ optionGroups: [g] }), {}, 1).missingRequired).toEqual([]);
+    expect(calculatePrice(product({ optionGroups: [g] }), {}, 1).missingRequired).toEqual(["name"]);
   });
 });
 
@@ -489,7 +489,7 @@ describe("calculateStartingPrice — «يبدأ من»", () => {
    * ((m − 1) × 100)، فلا يختار الأرخص فعلاً. العميل يرى «يبدأ من ١٢» بينما
    * أرخص خيار يعطي ٣.
    */
-  it.fails("[خطأ] «يبدأ من» لا يختار أرخص مزيج حين تختلط ADD_PER_UNIT وMULTIPLY", () => {
+  it("«يبدأ من» يختار أرخص مزيج حين تختلط ADD_PER_UNIT وMULTIPLY", () => {
     const g = group(
       "finish",
       [val("add", 10, "ADD_PER_UNIT"), val("mul", 1.5, "MULTIPLY")],
@@ -503,7 +503,7 @@ describe("calculateStartingPrice — «يبدأ من»", () => {
     expect(calculateStartingPrice(p)).toBe(actualMin);
   });
 
-  it.fails("[خطأ] «يبدأ من» يتجاهل أن OVERRIDE_UNIT قد يكون أرخص من الإضافة الصفرية", () => {
+  it("«يبدأ من» يراعي أن OVERRIDE_UNIT قد يكون أرخص من الإضافة الصفرية", () => {
     const g = group(
       "material",
       [val("std", 0, "ADD_PER_UNIT"), val("eco", 5, "OVERRIDE_UNIT")],

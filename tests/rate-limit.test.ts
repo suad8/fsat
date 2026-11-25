@@ -92,12 +92,12 @@ describe("clientKey", () => {
   const req = (headers: Record<string, string>) =>
     new Request("http://localhost/api/x", { headers });
 
-  it("أول عنوان في x-forwarded-for", () => {
-    expect(clientKey(req({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" }), "quote")).toBe("quote:1.2.3.4");
+  it("آخر عنوان في x-forwarded-for (الذي أضافه الوكيل الموثوق) لا أوله", () => {
+    expect(clientKey(req({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" }), "quote")).toBe("quote:10.0.0.1");
   });
 
   it("يقصّ المسافات", () => {
-    expect(clientKey(req({ "x-forwarded-for": "  1.2.3.4  ,x" }), "s")).toBe("s:1.2.3.4");
+    expect(clientKey(req({ "x-forwarded-for": "x ,  1.2.3.4  " }), "s")).toBe("s:1.2.3.4");
   });
 
   it("يرجع إلى x-real-ip ثم unknown", () => {
@@ -110,11 +110,9 @@ describe("clientKey", () => {
     expect(clientKey(r, "quote")).not.toBe(clientKey(r, "contact"));
   });
 
-  it("[ثغرة معروفة] ترويسة x-forwarded-for قابلة للانتحال تتجاوز الحد", () => {
-    // موثّق في rate-limit.ts: بلا وكيل موثوق يعيد كتابة الترويسة، يغيّر المهاجم
-    // قيمتها في كل طلب فيحصل على عدّاد جديد. المعالجة من محور الحماية.
-    const a = clientKey(req({ "x-forwarded-for": "9.9.9.1" }), "contact");
-    const b = clientKey(req({ "x-forwarded-for": "9.9.9.2" }), "contact");
-    expect(a).not.toBe(b);
+  it("انتحال x-forwarded-for بإضافة عناوين في أوله لا يغيّر المفتاح (لا تجاوز للحد)", () => {
+    const a = clientKey(req({ "x-forwarded-for": "9.9.9.1, 7.7.7.7" }), "contact");
+    const b = clientKey(req({ "x-forwarded-for": "9.9.9.2, 7.7.7.7" }), "contact");
+    expect(a).toBe(b);
   });
 });

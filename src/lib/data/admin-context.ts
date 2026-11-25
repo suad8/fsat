@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 import { requireAdmin } from "@/lib/auth";
+import { clientIp } from "@/lib/security/ip";
 import type { AuditActor } from "@/lib/data/audit";
 
 /**
@@ -17,13 +18,14 @@ export type AdminContext = {
   ip: string | null;
 };
 
-/** عنوان العميل خلف الوكيل العكسي: أول عنوان في x-forwarded-for. */
+/**
+ * عنوان العميل لسجلّ التدقيق. نستعمل المحلّل الآمن نفسه المستعمل في الحماية
+ * (العنصر الذي أضافه الوكيل الموثوق) لأن أول عنصر في x-forwarded-for يكتبه العميل.
+ */
 export async function requestIp(): Promise<string | null> {
   try {
-    const list = await headers();
-    const forwarded = list.get("x-forwarded-for");
-    const ip = forwarded?.split(",")[0]?.trim() || list.get("x-real-ip")?.trim();
-    return ip ? ip.slice(0, 64) : null;
+    const ip = clientIp(await headers());
+    return ip && ip !== "unknown" ? ip.slice(0, 64) : null;
   } catch {
     return null;
   }

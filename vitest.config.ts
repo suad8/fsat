@@ -12,7 +12,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/*.test.ts"],
+    // tests/data/** سكربتات tsx تحتاج قاعدة بيانات (npm run test:data) لا vitest
     coverage: {
       provider: "v8",
       include: ["src/lib/**/*.ts"],

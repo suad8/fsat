@@ -133,13 +133,22 @@ describe("quoteRequestSchema", () => {
   });
 
   it("أكثر من ١٠ مرفقات مرفوض", () => {
-    const att = { name: "a.png", url: "/uploads/a.png", size: 10, mimeType: "image/png" };
+    const att = { name: "a.png", url: "/uploads/quotes/ab12-0123456789abcdef.png", size: 10, mimeType: "image/png" };
     expect(
       quoteRequestSchema.safeParse({ ...validQuote, attachments: Array(11).fill(att) }).success,
     ).toBe(false);
     expect(
       quoteRequestSchema.safeParse({ ...validQuote, attachments: Array(10).fill(att) }).success,
     ).toBe(true);
+  });
+
+  it("رابط مرفق خارجي أو javascript: مرفوض (منع تصيّد/XSS في لوحة الإدارة)", () => {
+    for (const url of ["https://evil.example/x.png", "javascript:alert(1)", "//evil.example/a.png"]) {
+      const att = { name: "a.png", url, size: 10, mimeType: "image/png" };
+      expect(
+        quoteRequestSchema.safeParse({ ...validQuote, attachments: [att] }).success,
+      ).toBe(false);
+    }
   });
 
   it("حجم مرفق سالب مرفوض", () => {

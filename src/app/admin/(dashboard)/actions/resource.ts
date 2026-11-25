@@ -575,9 +575,20 @@ export async function fetchResourceRecord(
   slug: string,
   id: string,
 ): Promise<Record<string, unknown> | null> {
+  // لا قراءة بلا جلسة فعّالة (يرمي UNAUTHORIZED) — الـ proxy وحده لا يكفي
+  const ctx = await getAdminContext();
+
   const resource = getResource(slug);
   if (!resource) return null;
 
+  // بيانات الحسابات للمالك فقط، ولا تخرج كلمة المرور المجزّأة من الخادم أبدًا
+  if (resource.model === "adminUser" && ctx.role !== "OWNER") return null;
+
   const delegate = delegateFor(resource);
-  return delegate.findUnique({ where: { id } });
+  const record = (await delegate.findUnique({ where: { id } })) as Record<string, unknown> | null;
+  if (!record) return null;
+
+  const { passwordHash: _omit, ...safe } = record;
+  void _omit;
+  return safe;
 }
