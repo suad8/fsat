@@ -179,7 +179,7 @@ export function DesignUpload({
   const shownError = message ?? error ?? null;
 
   return (
-    <div id="group-design" data-group="design">
+    <div>
       <label htmlFor={inputId} className="text-primary-800 mb-2 block text-sm font-bold">
         {label}
         {required ? (
