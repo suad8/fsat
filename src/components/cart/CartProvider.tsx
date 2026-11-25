@@ -292,7 +292,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       items,
       hydrated,
-      itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+      // عدد البنود لا مجموع الوحدات: ١٠٠ كرت في بند واحد = «١» لا «٩٩+»
+      itemCount: items.length,
       subtotal: round2(items.reduce((sum, item) => sum + item.total, 0)),
       addItem,
       updateQuantity,
