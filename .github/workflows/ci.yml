@@ -1,0 +1,113 @@
+name: CI
+
+# يعمل على كل دفع وطلب دمج. النشر نفسه يتم من Railway عند الدمج في الفرع الرئيسي
+# (انظر docs/DEPLOY.md)، لذا لا توجد خطوة نشر هنا عمدًا.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+# إلغاء التشغيلات القديمة لنفس الفرع عند دفع جديد
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  # قاعدة مؤقتة داخل المشغّل فقط — الصفحات الثابتة تُقرأ من القاعدة وقت البناء
+  DATABASE_URL: file:./ci.db
+  AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Prepare database (migrate + seed)
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
+
+      - name: Cache Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.ts') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build for e2e
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: |
+            .next
+            ci.db
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e:
+    name: e2e smoke (playwright)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: next-build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke
+        run: npm run test:e2e
+        env:
+          # الخادم يعمل على قاعدة CI المبنية في المرحلة السابقة
+          DATABASE_URL: file:./ci.db
+
+      - name: Accessibility checks
+        run: npm run qa:a11y
+        env:
+          DATABASE_URL: file:./ci.db

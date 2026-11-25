@@ -27,4 +27,5 @@ if [ "$FIRST_RUN" = "1" ]; then
   touch "$DATA_DIR/db/.seeded"
 fi
 
-exec npx next start -p "${PORT:-3000}"
+# exec مباشرة على ثنائي next (لا npx) ليتلقّى SIGTERM من Railway ويُغلق بسلام
+exec node_modules/.bin/next start -H 0.0.0.0 -p "${PORT:-3000}"

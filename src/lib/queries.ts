@@ -195,7 +195,8 @@ export const getProducts = cache(
     const products = await prisma.product.findMany({
       where: {
         isActive: true,
-        ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+        // منتج في قسم معطَّل لا يُعرض: رابط قسمه يعطي 404 (انظر docs/QA.md)
+        category: { isActive: true, ...(categorySlug ? { slug: categorySlug } : {}) },
         ...(search
           ? {
               OR: [

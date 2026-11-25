@@ -92,13 +92,37 @@ const INJECT = () => {
     }
     await new Promise((r) => setTimeout(r, 400));
     sample();
-    const never = [];
-    hs.forEach((h, i) => {
-      if (seen.has(i)) return;
-      const shown = NS.isShown(h); // null = مخفي عمدًا
-      if (NS.headingInfo(h).skip) return;
-      if (shown !== true) never.push(NS.label(h));
+
+    // أشرطة السحب الأفقية (snap على الجوال): نحرّكها خطوة خطوة ليظهر كل عنصر
+    const scrollers = [...document.querySelectorAll("*")].filter((el) => {
+      const s = getComputedStyle(el);
+      return /(auto|scroll)/.test(s.overflowX) && el.scrollWidth > el.clientWidth + 8 && el.querySelector("h1,h2,h3");
     });
+    for (const el of scrollers) {
+      el.scrollIntoView({ block: "center" });
+      const max = el.scrollWidth - el.clientWidth;
+      const dir = getComputedStyle(el).direction === "rtl" ? -1 : 1;
+      for (let x = 0; x <= max + el.clientWidth * 0.8; x += el.clientWidth * 0.7) {
+        el.scrollLeft = dir * Math.min(x, max);
+        await new Promise((r) => setTimeout(r, 160));
+        sample();
+      }
+      el.scrollLeft = 0;
+    }
+
+    // ما لم نرصده: نذهب إليه مباشرة وننتظر انتهاء حركة الظهور (كما يفعل المستخدم)
+    const never = [];
+    for (let i = 0; i < hs.length; i++) {
+      const h = hs[i];
+      if (seen.has(i) || NS.headingInfo(h).skip) continue;
+      h.scrollIntoView({ block: "center", inline: "center" });
+      let ok = false;
+      for (let t = 0; t < 6 && !ok; t++) {
+        await new Promise((r) => setTimeout(r, 250));
+        ok = NS.isShown(h) !== false;
+      }
+      if (!ok) never.push(NS.label(h));
+    }
     scrollTo(0, 0);
     return { total: hs.length, never };
   };
@@ -146,8 +170,12 @@ const INJECT = () => {
       if (!raw || /^(mailto:|tel:|javascript:)/i.test(raw)) continue;
       if (raw.startsWith("#")) {
         if (raw.length > 1) {
-          const id = decodeURIComponent(raw.slice(1));
-          if (!document.getElementById(id) && !document.getElementsByName(id).length) missingAnchors.push(raw);
+          // المتصفّح يجرّب النص الخام أولًا ثم المفكوك (مواصفات HTML) فنفعل مثله
+          const rawId = raw.slice(1);
+          let id = rawId;
+          try { id = decodeURIComponent(rawId); } catch {}
+          const found = (v) => document.getElementById(v) || document.getElementsByName(v).length;
+          if (!found(rawId) && !found(id)) missingAnchors.push(raw);
         }
         continue;
       }
@@ -367,18 +395,31 @@ try {
 
   console.log(`› ${paths.length} مسارًا من ${server.baseUrl}`);
 
-  for (const p of paths) {
+  const pool = async (items, worker, size = 3) => {
+    const queue = items.slice().reverse();
+    await Promise.all(
+      Array.from({ length: size }, async () => {
+        while (queue.length) await worker(queue.pop());
+      }),
+    );
+  };
+
+  await pool(paths, async (p) => {
     await checkMobile(browser, server.baseUrl, p);
-    const last = results[results.length - 1];
+    const last = results.findLast((r) => r.path === p);
     console.log(`${last.ok ? "✓" : "✗"} ${p}${last.ok ? "" : `\n    ${last.problems.join("\n    ")}`}`);
-  }
+  });
 
   if (!args.quick) {
-    const sample = paths.filter((p) => !p.startsWith("/policies/"));
-    // عرضا 320 و768 على كل صفحة رئيسية
-    for (const p of sample.slice(0, 18)) await checkWidths(browser, server.baseUrl, p, [320, 768]);
-    // تقليل الحركة وبدون JS على كل المسارات (أرخص من الفحص الأول لأنها سطح مكتب)
-    for (const p of paths) await checkMotionVariants(browser, server.baseUrl, p);
+    // الأوضاع الإضافية على عيّنة تمثيلية (كل نوع صفحة مرة)؛ --full لكل المسارات
+    const firstOf = (re) => paths.find((p) => re.test(p));
+    const sample = args.full
+      ? paths
+      : [...new Set(["/", "/shop", "/services", "/portfolio", "/about", "/faq", "/contact", "/quote", "/cart", "/checkout",
+          firstOf(/^\/shop\/[^/]+$/), firstOf(/^\/shop\/[^/]+\/[^/]+$/), firstOf(/^\/services\/[^/]+$/),
+          firstOf(/^\/portfolio\/[^/]+$/), firstOf(/^\/policies\//)].filter((p) => p && paths.includes(p)))];
+    await pool(sample, (p) => checkWidths(browser, server.baseUrl, p, [320, 768]));
+    await pool(sample, (p) => checkMotionVariants(browser, server.baseUrl, p));
   }
 
   await checkLinks(server.baseUrl);
