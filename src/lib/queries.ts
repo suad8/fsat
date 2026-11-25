@@ -2,11 +2,8 @@ import { decodeSlug } from "@/lib/utils";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
-import {
-  calculateStartingPrice,
-  type PricingOptionGroup,
-  type PricingProduct,
-} from "@/lib/pricing";
+import { stripPlaceholders } from "@/lib/data/placeholders";
+import { calculateStartingPrice, toPricingProduct } from "@/lib/pricing";
 import type { OptionType, PriceMode } from "@/lib/constants";
 
 /**
@@ -151,14 +148,7 @@ function toProductCard(product: {
     }[];
   }[];
 }): ProductCard {
-  const pricing: PricingProduct = {
-    priceMode: product.priceMode as PriceMode,
-    basePrice: product.basePrice,
-    minQuantity: product.minQuantity,
-    quantityStep: product.quantityStep,
-    quantityTiers: product.quantityTiers,
-    optionGroups: product.optionGroups as unknown as PricingOptionGroup[],
-  };
+  const pricing = toPricingProduct(product);
 
   return {
     id: product.id,
@@ -198,7 +188,9 @@ export const getProducts = cache(
     search?: string;
     sort?: "featured" | "priceAsc" | "priceDesc" | "newest";
   }): Promise<ProductCard[]> => {
-    const { categorySlug, search, sort = "featured" } = options ?? {};
+    const { categorySlug, sort = "featured" } = options ?? {};
+    // مدخل بحث مفرط الطول لا فائدة منه ويُبطئ LIKE — نقصّه
+    const search = options?.search?.trim().slice(0, 100) || undefined;
 
     const products = await prisma.product.findMany({
       where: {
@@ -227,6 +219,7 @@ export const getProducts = cache(
     if (sort === "priceAsc" || sort === "priceDesc") {
       cards.sort((a, b) => {
         // منتجات عرض السعر تُدفع لآخر القائمة في الحالتين
+        if (a.startingPrice === null && b.startingPrice === null) return 0;
         if (a.startingPrice === null) return 1;
         if (b.startingPrice === null) return -1;
         return sort === "priceAsc"
@@ -398,9 +391,22 @@ export const getEquipment = cache(async () => {
   });
 });
 
+/**
+ * الصفحة الثابتة للزائر. أي علامة «يحتاج استبدال» أو سطر تحذير مسوّدة قديم
+ * يُزال هنا فلا يراه العميل؛ الإدارة ترى النص الخام وعلامة needsReview.
+ */
 export const getPageBySlug = cache(async (slug: string) => {
   slug = decodeSlug(slug);
-  return prisma.page.findFirst({ where: { slug, isActive: true } });
+  const page = await prisma.page.findFirst({ where: { slug, isActive: true } });
+  if (!page) return null;
+
+  return {
+    ...page,
+    title: stripPlaceholders(page.title),
+    content: stripPlaceholders(page.content),
+    seoTitle: page.seoTitle ? stripPlaceholders(page.seoTitle) : null,
+    seoDescription: page.seoDescription ? stripPlaceholders(page.seoDescription) : null,
+  };
 });
 
 export const getShippingZones = cache(async () => {

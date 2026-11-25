@@ -10,15 +10,8 @@
 
 import "dotenv/config";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-
-import { PrismaClient } from "../src/generated/prisma/client";
-
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
-  }),
-});
+import type { PrismaClient } from "../src/generated/prisma/client";
+import { createPrismaClient } from "../src/lib/data/create-client";
 
 const FIELDS = [
   {
@@ -93,7 +86,8 @@ const FIELDS = [
   },
 ];
 
-async function main() {
+/** يُستدعى من prisma/seed.ts، ويعمل مستقلاً كذلك (انظر أسفل الملف). */
+export async function seedQuoteFields(prisma: PrismaClient) {
   for (const [index, field] of FIELDS.entries()) {
     await prisma.quoteFormField.upsert({
       where: { key: field.key },
@@ -116,14 +110,18 @@ async function main() {
   }
 
   const total = await prisma.quoteFormField.count();
-  console.log(`✔ حقول قالب عرض السعر: ${total}`);
+  console.log(`  • حقول قالب عرض السعر: ${total}`);
 }
 
-main()
-  .catch((error) => {
-    console.error("✖ فشلت التهيئة:", error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// التشغيل المباشر فقط — الاستيراد من seed.ts لا يشغّل شيئًا
+if (require.main === module) {
+  const prisma = createPrismaClient();
+  seedQuoteFields(prisma)
+    .catch((error) => {
+      console.error("✖ فشلت التهيئة:", error);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

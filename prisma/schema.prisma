@@ -8,6 +8,12 @@
 //  ملاحظة: SQLite لا يدعم enum في Prisma، لذا تُستخدم حقول String مع توثيق
 //  القيم المسموحة أعلى كل حقل، وتُفرض القيم فعليًا عبر Zod في طبقة التطبيق
 //  (src/lib/validation) وعبر ثوابت TypeScript في src/lib/constants.ts.
+//
+//  المال: كل الأعمدة المالية Float لكن قيمها دائمًا مضاعفات الهللة (منزلتان)،
+//  والحساب كله يجري بأعداد صحيحة بالهللات (src/lib/data/money.ts). سبب بقائها
+//  Float لا Int/Decimal موثّق في docs/DATA.md (توافق الواجهات).
+//
+//  التفاصيل الكاملة للنموذج وقواعد الأعمال: docs/DATA.md
 // ============================================================================
 
 generator client {
@@ -63,9 +69,9 @@ model Product {
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   /// FIXED = سعر ثابت | STARTS_FROM = يبدأ من | QUOTE_ONLY = بعرض سعر فقط
-  priceMode      String  @default("FIXED")
+  priceMode      String @default("FIXED")
   /// سعر الوحدة الأساسي قبل معدّلات الخيارات وشرائح الكميات
-  basePrice      Float   @default(0)
+  basePrice      Float  @default(0)
   /// السعر قبل الخصم — يُعرض مشطوبًا عند وجوده
   compareAtPrice Float?
 
@@ -74,11 +80,15 @@ model Product {
   minQuantity  Int    @default(1)
   quantityStep Int    @default(1)
 
-  sku String?
+  sku String? @unique
 
   isActive   Boolean @default(true)
   isFeatured Boolean @default(false)
   order      Int     @default(0)
+
+  /// بيانات مبدئية (أسعار/أوصاف) تنتظر مراجعة الإدارة — تظهر في لوحة الإدارة
+  /// فقط ولا تُعرض للزائر. يُصفَّر تلقائيًا عند حفظ الإدارة للمنتج.
+  needsReview Boolean @default(false)
 
   /// مدة التنفيذ كنص حرّ: "٣ – ٥ أيام عمل"
   leadTime String?
@@ -98,7 +108,8 @@ model Product {
 
   @@index([categoryId, isActive])
   @@index([isFeatured, isActive])
-  @@index([order])
+  @@index([isActive, order])
+  @@index([isActive, createdAt])
 }
 
 model ProductImage {
@@ -175,15 +186,15 @@ model QuantityTier {
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  minQty Int
+  minQty    Int
   /// null تعني "وما فوق"
-  maxQty Int?
+  maxQty    Int?
   /// سعر الوحدة ضمن هذه الشريحة
   unitPrice Float
   label     String?
   order     Int     @default(0)
 
-  @@index([productId, minQty])
+  @@unique([productId, minQty])
 }
 
 // ============================================================================
@@ -203,6 +214,9 @@ model Customer {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([createdAt])
 }
 
 model Order {
@@ -225,11 +239,14 @@ model Order {
   postalCode  String?
 
   /// BANK_TRANSFER | ONLINE | COD | ON_PICKUP
-  paymentMethod String
+  paymentMethod   String
   /// PENDING | PAID | REFUNDED | FAILED
-  paymentStatus String @default("PENDING")
+  paymentStatus   String   @default("PENDING")
   /// NEW | CONFIRMED | IN_PRODUCTION | READY | SHIPPED | DELIVERED | CANCELLED
-  status        String @default("NEW")
+  /// الانتقالات المسموحة معرّفة في src/lib/data/order-state.ts
+  status          String   @default("NEW")
+  /// آخر مرة تغيّرت فيها الحالة — لاكتشاف الطلبات العالقة
+  statusChangedAt DateTime @default(now())
 
   subtotal       Float
   discountAmount Float   @default(0)
@@ -241,13 +258,49 @@ model Order {
   notes      String?
   adminNotes String?
 
-  items OrderItem[]
+  /// مفتاح يمنع تكرار الطلب عند النقر المزدوج أو إعادة الإرسال.
+  /// يأتي من العميل (Idempotency-Key) أو يُشتق من بصمة الطلب.
+  idempotencyKey String? @unique
+
+  items  OrderItem[]
+  events OrderStatusEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([paymentStatus, createdAt])
+  @@index([customerPhone, createdAt])
   @@index([customerId])
+  @@index([createdAt])
+}
+
+/// تاريخ تغيّرات الطلب: الحالة، الدفع، الملاحظات. يغذّي الخط الزمني للعميل
+/// (الأحداث isPublic فقط) وللإدارة (كل الأحداث).
+model OrderStatusEvent {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// STATUS | PAYMENT | NOTE
+  kind       String  @default("STATUS")
+  /// null عند إنشاء الطلب
+  fromStatus String?
+  /// الحالة الجديدة (حالة الطلب أو حالة الدفع حسب kind) — فارغة للملاحظات
+  toStatus   String?
+  note       String?
+
+  /// SYSTEM | ADMIN | CUSTOMER
+  actorType String  @default("SYSTEM")
+  actorId   String?
+  actorName String?
+
+  /// يظهر للعميل في صفحة التتبّع؟ الملاحظات الداخلية false
+  isPublic Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
 }
 
 model OrderItem {
@@ -274,6 +327,7 @@ model OrderItem {
   notes     String?
 
   @@index([orderId])
+  @@index([productId])
 }
 
 // ============================================================================
@@ -320,6 +374,8 @@ model QuoteRequest {
   updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([phone])
+  @@index([createdAt])
 }
 
 /// حقل في قالب نموذج طلب عرض السعر.
@@ -490,6 +546,9 @@ model Equipment {
   isActive    Boolean @default(true)
   order       Int     @default(0)
 
+  /// مواصفات مبدئية تنتظر مطابقتها مع معدات المنشأة الفعلية — للإدارة فقط
+  needsReview Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -528,6 +587,9 @@ model Faq {
   order    Int     @default(0)
   isActive Boolean @default(true)
 
+  /// إجابة مبدئية تتضمّن التزامات (مدد/سياسات) تنتظر مراجعتك — للإدارة فقط
+  needsReview Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -546,6 +608,9 @@ model Page {
   seoDescription String?
 
   isActive Boolean @default(true)
+
+  /// نص مبدئي ينتظر مراجعة (قانونية غالبًا) — إشارة للإدارة فقط
+  needsReview Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -574,6 +639,8 @@ model Coupon {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([isActive, expiresAt])
 }
 
 model ShippingZone {
@@ -590,8 +657,13 @@ model ShippingZone {
   isActive Boolean @default(true)
   order    Int     @default(0)
 
+  /// التكلفة/المدد مبدئية وتنتظر مراجعة الإدارة
+  needsReview Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
 }
 
 /// سجل مفرد — id ثابت "singleton"
@@ -685,8 +757,8 @@ model ContactMessage {
 }
 
 model MediaAsset {
-  id           String @id @default(cuid())
-  url          String @unique
+  id           String  @id @default(cuid())
+  url          String  @unique
   filename     String
   originalName String
   mimeType     String
@@ -695,7 +767,7 @@ model MediaAsset {
   height       Int?
   alt          String?
   /// مجلد منطقي للتنظيم: products, projects, services, equipment, uploads
-  folder       String @default("uploads")
+  folder       String  @default("uploads")
 
   createdAt DateTime @default(now())
 
@@ -718,5 +790,68 @@ model AdminUser {
   lastLoginAt DateTime?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+//  التدقيق والأمان والنظام
+// ============================================================================
+
+/// سجلّ تدقيق: من فعل ماذا ومتى. يُكتب من إجراءات الإدارة
+/// (src/lib/data/audit.ts) ولا يُعدَّل ولا يُحذف من التطبيق.
+///
+/// لا علاقة FK مع AdminUser عمدًا: يبقى السجل صحيحًا حتى بعد حذف الحساب،
+/// ونحتفظ بلقطة من البريد والاسم وقت الفعل.
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  actorId    String?
+  actorEmail String?
+  actorName  String?
+
+  /// CREATE | UPDATE | DELETE | STATUS_CHANGE | SETTINGS_CHANGE | LOGIN | ...
+  action   String
+  /// اسم الكيان: Product, Order, SiteSettings, Coupon, AdminUser …
+  entity   String
+  entityId String?
+
+  /// جملة عربية مقروءة تُعرض في الجدول
+  summary String
+  /// { field: { from, to } } للتعديلات، أو لقطة مختصرة للإنشاء/الحذف
+  changes Json?
+
+  ip String?
+
+  @@index([createdAt])
+  @@index([entity, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+/// محاولات تسجيل دخول الإدارة — تغذّي الحدّ من المحاولات الفاشلة على مستوى
+/// القاعدة (يصمد أمام إعادة تشغيل العملية وتعدّد النسخ، بخلاف الذاكرة).
+/// مقترح لمحور الحماية: انظر src/lib/data/login-attempts.ts
+model LoginAttempt {
+  id      String  @id @default(cuid())
+  /// البريد بعد التوحيد (lowercase) — حتى لو لم يكن حسابًا موجودًا
+  email   String
+  ip      String?
+  success Boolean
+  /// BAD_CREDENTIALS | LOCKED | INACTIVE | ...
+  reason  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+  @@index([createdAt])
+}
+
+/// عدّادات تسلسلية آمنة من التزامن (أرقام الطلبات والمراجع).
+/// المفتاح مثل "ORD-2026" — الزيادة تتم بتحديث ذرّي داخل معاملة.
+model Sequence {
+  key       String   @id
+  value     Int      @default(0)
   updatedAt DateTime @updatedAt
 }

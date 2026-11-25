@@ -1,33 +1,38 @@
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-
-import { PrismaClient } from "@/generated/prisma/client";
+import { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { createPrismaClient } from "@/lib/data/create-client";
 
 /**
- * عميل Prisma مفرد.
+ * ============================================================================
+ *  عميل Prisma المفرد
+ * ============================================================================
+ *  Prisma 7 يتطلب محوّل تعريف (driver adapter) صريحًا. نوع القاعدة يُستنتج من
+ *  بروتوكول DATABASE_URL فلا حاجة لمتغيّر إضافي (المنطق في
+ *  src/lib/data/create-client.ts):
  *
- * في وضع التطوير يعيد Next.js تحميل الوحدات عند كل تعديل، وإنشاء عميل جديد
- * في كل مرة يستنفد اتصالات قاعدة البيانات. تخزينه على globalThis يمنع ذلك.
+ *    file:./dev.db                   ← SQLite (الافتراضي، @prisma/adapter-better-sqlite3)
+ *    postgres://… أو postgresql://…  ← PostgreSQL (@prisma/adapter-pg)
  *
- * Prisma 7 يتطلب محوّل تعريف (driver adapter) صريحًا. للانتقال إلى PostgreSQL
- * استبدل المحوّل بـ @prisma/adapter-pg وغيّر provider في schema.prisma —
- * لا يتغيّر أي استعلام في التطبيق.
+ *  ⚠️ التحويل إلى PostgreSQL يحتاج خطوات لا يكفي فيها تغيير الرابط وحده
+ *  (provider في المخطط، اعتماديتان، هجرات جديدة، نقل البيانات). كلها موثّقة
+ *  في docs/DATA.md قسم «الانتقال إلى PostgreSQL». محوّل pg يُحمَّل عند الطلب
+ *  فقط، فلا يتأثر المشروع الحالي ولا يُضاف أي اعتماد قبل الانتقال.
+ *
+ *  في وضع التطوير يعيد Next.js تحميل الوحدات عند كل تعديل، وإنشاء عميل جديد
+ *  في كل مرة يستنفد الاتصالات. تخزينه على globalThis يمنع ذلك.
+ * ============================================================================
  */
+
+export { createPrismaClient, detectDatabaseKind, type DatabaseKind } from "@/lib/data/create-client";
+
+export type PrismaTx = Prisma.TransactionClient;
+/** يقبل العميل العادي أو عميل المعاملة — لدوال تعمل داخل المعاملة وخارجها. */
+export type DbClient = PrismaClient | PrismaTx;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function createClient() {
-  const url = process.env.DATABASE_URL ?? "file:./dev.db";
-  const adapter = new PrismaBetterSqlite3({ url });
-
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
-}
-
-export const prisma = globalForPrisma.prisma ?? createClient();
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;

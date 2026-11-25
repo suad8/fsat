@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAdmin } from "@/lib/auth";
 import { PROJECT_IMAGE_STAGES } from "@/lib/constants";
+import { getAdminContext, type AdminContext } from "@/lib/data/admin-context";
+import { diffRecords, logAudit, writeAudit } from "@/lib/data/audit";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 
@@ -12,14 +13,47 @@ import { slugify } from "@/lib/utils";
 
 type Result = { ok: true; id: string } | { ok: false; error: string; issues?: string[] };
 
-async function guard(): Promise<{ ok: false; error: string } | null> {
+async function guard(): Promise<{ ctx: AdminContext } | { denied: { ok: false; error: string } }> {
   try {
-    await requireAdmin();
-    return null;
+    return { ctx: await getAdminContext() };
   } catch {
-    return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
+    return { denied: { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." } };
   }
 }
+
+const PROJECT_AUDIT_FIELDS = [
+  "title",
+  "slug",
+  "categoryId",
+  "clientName",
+  "summary",
+  "description",
+  "materials",
+  "dimensions",
+  "techniques",
+  "completedAt",
+  "relatedProductId",
+  "isFeatured",
+  "isActive",
+  "order",
+  "seoTitle",
+  "seoDescription",
+] as const;
+
+const SERVICE_AUDIT_FIELDS = [
+  "title",
+  "slug",
+  "shortDescription",
+  "description",
+  "iconKey",
+  "imageUrl",
+  "imageAlt",
+  "isActive",
+  "isFeatured",
+  "order",
+  "seoTitle",
+  "seoDescription",
+] as const;
 
 // ---------------------------------------------------------------------------
 // معرض الأعمال
@@ -57,8 +91,9 @@ const projectSchema = z.object({
 });
 
 export async function saveProjectAction(payload: unknown): Promise<Result> {
-  const denied = await guard();
-  if (denied) return denied;
+  const auth = await guard();
+  if ("denied" in auth) return auth.denied;
+  const { ctx } = auth;
 
   const parsed = projectSchema.safeParse(payload);
 
@@ -108,12 +143,43 @@ export async function saveProjectAction(payload: unknown): Promise<Result> {
     let projectId = data.id;
 
     if (projectId) {
-      await prisma.$transaction([
-        prisma.projectImage.deleteMany({ where: { projectId } }),
-        prisma.project.update({ where: { id: projectId }, data: { ...base, images } }),
-      ]);
+      const id = projectId;
+      const before = await prisma.project.findUnique({ where: { id } });
+      if (!before) return { ok: false, error: "المشروع غير موجود." };
+
+      await prisma.$transaction(async (tx) => {
+        await tx.projectImage.deleteMany({ where: { projectId: id } });
+        await tx.project.update({ where: { id }, data: { ...base, images } });
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "UPDATE",
+            entity: "Project",
+            entityId: id,
+            summary: `تعديل المشروع «${data.title}»`,
+            changes: diffRecords(before, base, { fields: PROJECT_AUDIT_FIELDS }),
+            ip: ctx.ip,
+          },
+          tx,
+        );
+      });
     } else {
-      const created = await prisma.project.create({ data: { ...base, images } });
+      const created = await prisma.$transaction(async (tx) => {
+        const record = await tx.project.create({ data: { ...base, images } });
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "CREATE",
+            entity: "Project",
+            entityId: record.id,
+            summary: `إضافة مشروع «${data.title}» إلى معرض الأعمال`,
+            changes: { slug, categoryId: base.categoryId, images: data.images.length },
+            ip: ctx.ip,
+          },
+          tx,
+        );
+        return record;
+      });
       projectId = created.id;
     }
 
@@ -135,11 +201,26 @@ export async function saveProjectAction(payload: unknown): Promise<Result> {
 export async function deleteProjectAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const denied = await guard();
-  if (denied) return { ok: false, error: denied.error };
+  const auth = await guard();
+  if ("denied" in auth) return { ok: false, error: auth.denied.error };
+  const { ctx } = auth;
 
   try {
-    await prisma.project.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      const project = await tx.project.delete({ where: { id } });
+      await writeAudit(
+        {
+          actor: ctx.actor,
+          action: "DELETE",
+          entity: "Project",
+          entityId: id,
+          summary: `حذف المشروع «${project.title}»`,
+          changes: { title: project.title, slug: project.slug },
+          ip: ctx.ip,
+        },
+        tx,
+      );
+    });
   } catch (error) {
     console.error("[admin] فشل حذف المشروع:", error);
     return { ok: false, error: "تعذّر حذف المشروع." };
@@ -182,8 +263,9 @@ const serviceSchema = z.object({
 });
 
 export async function saveServiceAction(payload: unknown): Promise<Result> {
-  const denied = await guard();
-  if (denied) return denied;
+  const auth = await guard();
+  if ("denied" in auth) return auth.denied;
+  const { ctx } = auth;
 
   const parsed = serviceSchema.safeParse(payload);
 
@@ -229,16 +311,47 @@ export async function saveServiceAction(payload: unknown): Promise<Result> {
     let serviceId = data.id;
 
     if (serviceId) {
-      await prisma.$transaction([
-        prisma.serviceImage.deleteMany({ where: { serviceId } }),
-        prisma.service.update({
-          where: { id: serviceId },
+      const id = serviceId;
+      const before = await prisma.service.findUnique({ where: { id } });
+      if (!before) return { ok: false, error: "الخدمة غير موجودة." };
+
+      await prisma.$transaction(async (tx) => {
+        await tx.serviceImage.deleteMany({ where: { serviceId: id } });
+        await tx.service.update({
+          where: { id },
           data: { ...base, images, products: { set: productLinks } },
-        }),
-      ]);
+        });
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "UPDATE",
+            entity: "Service",
+            entityId: id,
+            summary: `تعديل الخدمة «${data.title}»`,
+            changes: diffRecords(before, base, { fields: SERVICE_AUDIT_FIELDS }),
+            ip: ctx.ip,
+          },
+          tx,
+        );
+      });
     } else {
-      const created = await prisma.service.create({
-        data: { ...base, images, products: { connect: productLinks } },
+      const created = await prisma.$transaction(async (tx) => {
+        const record = await tx.service.create({
+          data: { ...base, images, products: { connect: productLinks } },
+        });
+        await writeAudit(
+          {
+            actor: ctx.actor,
+            action: "CREATE",
+            entity: "Service",
+            entityId: record.id,
+            summary: `إضافة الخدمة «${data.title}»`,
+            changes: { slug, products: data.productIds.length },
+            ip: ctx.ip,
+          },
+          tx,
+        );
+        return record;
       });
       serviceId = created.id;
     }
@@ -261,11 +374,26 @@ export async function saveServiceAction(payload: unknown): Promise<Result> {
 export async function deleteServiceAction(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const denied = await guard();
-  if (denied) return { ok: false, error: denied.error };
+  const auth = await guard();
+  if ("denied" in auth) return { ok: false, error: auth.denied.error };
+  const { ctx } = auth;
 
   try {
-    await prisma.service.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      const service = await tx.service.delete({ where: { id } });
+      await writeAudit(
+        {
+          actor: ctx.actor,
+          action: "DELETE",
+          entity: "Service",
+          entityId: id,
+          summary: `حذف الخدمة «${service.title}»`,
+          changes: { title: service.title, slug: service.slug },
+          ip: ctx.ip,
+        },
+        tx,
+      );
+    });
   } catch (error) {
     console.error("[admin] فشل حذف الخدمة:", error);
     return { ok: false, error: "تعذّر حذف الخدمة." };
@@ -283,15 +411,30 @@ export async function toggleContentFieldAction(
   field: "isActive" | "isFeatured",
   value: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  const denied = await guard();
-  if (denied) return { ok: false, error: denied.error };
+  const auth = await guard();
+  if ("denied" in auth) return { ok: false, error: auth.denied.error };
+  const { ctx } = auth;
+
+  // القيم تأتي من العميل: قوائم مغلقة قبل استعمالها اسم نموذج/عمود
+  if ((model !== "project" && model !== "service") || (field !== "isActive" && field !== "isFeatured")) {
+    return { ok: false, error: "طلب غير صالح." };
+  }
 
   try {
-    if (model === "project") {
-      await prisma.project.update({ where: { id }, data: { [field]: value } });
-    } else {
-      await prisma.service.update({ where: { id }, data: { [field]: value } });
-    }
+    const record =
+      model === "project"
+        ? await prisma.project.update({ where: { id }, data: { [field]: Boolean(value) }, select: { title: true } })
+        : await prisma.service.update({ where: { id }, data: { [field]: Boolean(value) }, select: { title: true } });
+
+    await logAudit({
+      actor: ctx.actor,
+      action: "UPDATE",
+      entity: model === "project" ? "Project" : "Service",
+      entityId: id,
+      summary: `${field === "isActive" ? (value ? "نشر" : "إخفاء") : value ? "تمييز" : "إلغاء تمييز"} «${record.title}»`,
+      changes: { [field]: { from: !value, to: value } },
+      ip: ctx.ip,
+    });
   } catch (error) {
     console.error("[admin] فشل التحديث:", error);
     return { ok: false, error: "تعذّر التحديث." };

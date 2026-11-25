@@ -2,8 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin, hashPassword } from "@/lib/auth";
 import { getResource, type FieldDef, type ResourceDef } from "@/lib/admin/resources";
+import { hashPassword } from "@/lib/auth";
+import { ADMIN_ROLES } from "@/lib/constants";
+import { getAdminContext, type AdminContext } from "@/lib/data/admin-context";
+import { diffRecords, logAudit } from "@/lib/data/audit";
+import { MAX_MONEY, roundMoney } from "@/lib/data/money";
+import { checkAdminPassword } from "@/lib/data/password-policy";
 import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 
@@ -60,7 +65,8 @@ function coerce(field: FieldDef, form: FormData): unknown {
       const raw = form.get(field.name);
       if (typeof raw !== "string" || raw.trim() === "") return null;
       const parsed = Number.parseFloat(raw);
-      return Number.isNaN(parsed) ? null : parsed;
+      // كل المبالغ تُخزَّن مضاعفًا دقيقًا للهللة
+      return Number.isFinite(parsed) ? roundMoney(parsed) : null;
     }
 
     case "date": {
@@ -113,6 +119,159 @@ function parseKeyValue(raw: FormDataEntryValue | null): { label: string; value: 
     .filter((entry) => entry.label.length > 0);
 }
 
+// ---------------------------------------------------------------------------
+// قواعد الأعمال لكل مورد
+// ---------------------------------------------------------------------------
+
+/**
+ * حقل التاريخ يصل منتصف ليل UTC لليوم المختار. الكوبون ينتهي بنهاية ذلك
+ * اليوم (٢٣:٥٩:٥٩٫٩٩٩) لا بدايته، وإلا انتهى «يوم الانتهاء» قبل أن يبدأ.
+ * نبقى على أيام UTC عمدًا: الواجهة تعرض التاريخ بـ toISOString فيبقى اليوم
+ * المعروض ثابتًا عند تكرار التعديل والحفظ (التحويل لتوقيت الرياض كان سيزحزحه
+ * يومًا في كل مرة).
+ */
+function endOfDay(date: Date): Date {
+  const start = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return new Date(start + 24 * 3_600_000 - 1);
+}
+
+const COUPON_CODE = /^[A-Z0-9_-]{3,30}$/;
+
+/**
+ * قواعد تتجاوز "الحقل مطلوب": مثلاً نسبة الخصم لا تتجاوز ١٠٠ والتواريخ مرتّبة.
+ * تعدّل `data` في مكانها (تقريب/تطبيع) وتضيف أخطاء الحقول.
+ */
+function validateResourceRules(
+  resource: ResourceDef,
+  form: FormData,
+  data: Record<string, unknown>,
+  errors: Record<string, string>,
+): void {
+  // أي مبلغ سالب أو ضخم مرفوض مهما كان المورد
+  for (const field of resource.fields) {
+    if (field.type !== "price") continue;
+    const value = data[field.name];
+    if (typeof value === "number" && (value < 0 || value > MAX_MONEY)) {
+      errors[field.name] = "المبلغ غير صالح";
+    }
+  }
+
+  switch (resource.model) {
+    case "coupon": {
+      // قيمة الخصم قد تكون كسرية (٧٫٥٪ أو ١٢٫٥ ريال) — حقل number يقطعها لعدد صحيح
+      const rawValue = form.get("value");
+      const value = typeof rawValue === "string" ? Number.parseFloat(rawValue) : Number.NaN;
+      data.value = Number.isFinite(value) ? roundMoney(value) : null;
+
+      const code = typeof data.code === "string" ? data.code.toUpperCase().replace(/\s+/g, "") : "";
+      if (!COUPON_CODE.test(code)) {
+        errors.code = "الرمز حروف إنجليزية وأرقام و - _ فقط (٣ إلى ٣٠)";
+      }
+
+      if (typeof data.value === "number") {
+        if (data.value <= 0) errors.value = "قيمة الخصم يجب أن تكون أكبر من صفر";
+        else if (data.type === "PERCENT" && data.value > 100) {
+          errors.value = "النسبة المئوية لا تتجاوز ١٠٠";
+        }
+      }
+
+      if (typeof data.maxUses === "number" && data.maxUses < 1) {
+        errors.maxUses = "أقصى استخدام يجب أن يكون ١ على الأقل (أو اتركه فارغًا)";
+      }
+
+      // التواريخ: البداية أول اليوم والنهاية آخره
+      if (data.expiresAt instanceof Date) data.expiresAt = endOfDay(data.expiresAt);
+      if (
+        data.startsAt instanceof Date &&
+        data.expiresAt instanceof Date &&
+        data.expiresAt <= data.startsAt
+      ) {
+        errors.expiresAt = "تاريخ الانتهاء يجب أن يلي تاريخ البداية";
+      }
+      break;
+    }
+
+    case "shippingZone": {
+      if (Array.isArray(data.cities) && data.cities.length === 0) {
+        errors.cities = "اختر مدينة واحدة على الأقل";
+      }
+      // الشحن المجاني فوق مبلغ أقل من التكلفة نفسها غير منطقي لكنه ممكن — نمنع الصفر فقط
+      if (data.freeOverAmount === 0) data.freeOverAmount = null;
+      break;
+    }
+
+    case "testimonial": {
+      if (typeof data.rating === "number" && (data.rating < 1 || data.rating > 5)) {
+        errors.rating = "التقييم من ١ إلى ٥";
+      }
+      break;
+    }
+
+    case "adminUser": {
+      if (typeof data.email === "string" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        errors.email = "صيغة البريد الإلكتروني غير صحيحة";
+      }
+      if (typeof data.role === "string" && !(ADMIN_ROLES as readonly string[]).includes(data.role)) {
+        errors.role = "صلاحية غير معروفة";
+      }
+      break;
+    }
+  }
+}
+
+/** الموارد التي تحمل علامة "بيانات مبدئية" تُصفَّر عند حفظ الإدارة لها. */
+const REVIEWABLE_MODELS = new Set(["page", "shippingZone", "equipment", "faq"]);
+
+/** صفحات تعتمد عليها روابط الموقع (التذييل) — تُخفى ولا تُحذف. */
+const PROTECTED_PAGE_SLUGS = new Set(["privacy", "terms", "returns", "shipping"]);
+
+/** اسم الكيان في سجلّ التدقيق: coupon ← Coupon */
+function entityName(model: string): string {
+  return model.charAt(0).toUpperCase() + model.slice(1);
+}
+
+/** تسمية مقروءة للسجل من أول حقل نصي معروف. */
+function recordLabel(record: Record<string, unknown> | null | undefined): string {
+  if (!record) return "";
+  for (const key of ["name", "title", "code", "question", "authorName", "email", "slug"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.slice(0, 80);
+  }
+  return String(record.id ?? "");
+}
+
+/**
+ * حماية الحسابات: لا يُترك النظام بلا مالك فعّال، ولا يعطّل المستخدم نفسه.
+ * يعيد رسالة خطأ أو null.
+ */
+async function guardAdminUserChange(
+  ctx: AdminContext,
+  id: string | null,
+  next: { role?: unknown; isActive?: unknown } | "delete",
+): Promise<string | null> {
+  // إدارة الحسابات للمالك فقط — وإلا صار المحرّر قادرًا على ترقية نفسه
+  if (ctx.role !== "OWNER") return "إدارة المستخدمين متاحة للمالك فقط.";
+  if (!id) return null;
+
+  const target = await prisma.adminUser.findUnique({ where: { id } });
+  if (!target) return null;
+
+  const removing = next === "delete" || next.isActive === false || (next.role && next.role !== "OWNER");
+
+  if (id === ctx.actor.id && (next === "delete" || next.isActive === false)) {
+    return "لا يمكنك حذف حسابك أو تعطيله بنفسك.";
+  }
+
+  if (removing && target.role === "OWNER" && target.isActive) {
+    const otherOwners = await prisma.adminUser.count({
+      where: { role: "OWNER", isActive: true, id: { not: id } },
+    });
+    if (otherOwners === 0) return "لا يمكن إزالة آخر مالك فعّال للنظام.";
+  }
+
+  return null;
+}
+
 /** بناء بيانات الحفظ مع التحقق من الحقول الإلزامية. */
 function buildData(
   resource: ResourceDef,
@@ -140,6 +299,8 @@ function buildData(
     data[field.name] = value;
   }
 
+  validateResourceRules(resource, form, data, fieldErrors);
+
   // توليد slug تلقائيًا إن تُرك فارغًا وكان المورد يستخدمه
   if ("slug" in data && !data.slug) {
     const source = (data.name ?? data.title ?? data.question) as string | undefined;
@@ -165,15 +326,21 @@ function buildData(
 
 // ---------------------------------------------------------------------------
 
+async function guard(): Promise<{ ctx: AdminContext } | { error: string }> {
+  try {
+    return { ctx: await getAdminContext() };
+  } catch {
+    return { error: "انتهت جلستك. أعد تسجيل الدخول." };
+  }
+}
+
 export async function saveResourceAction(
   _previous: ResourceState,
   form: FormData,
 ): Promise<ResourceState> {
-  try {
-    await requireAdmin();
-  } catch {
-    return { error: "انتهت جلستك. أعد تسجيل الدخول." };
-  }
+  const auth = await guard();
+  if ("error" in auth) return { error: auth.error };
+  const { ctx } = auth;
 
   const slug = form.get("__resource");
   const id = form.get("__id");
@@ -189,26 +356,67 @@ export async function saveResourceAction(
     return { fieldErrors, error: "تحقّق من الحقول المطلوبة." };
   }
 
+  const editingId = typeof id === "string" && id !== "" ? id : null;
+
   // كلمة مرور مستخدمي اللوحة تُعالَج خارج الحقول العامة لأنها تُجزَّأ ولا تُقرأ
   if (resource.model === "adminUser") {
+    const denied = await guardAdminUserChange(ctx, editingId, data);
+    if (denied) return { error: denied };
+
     const password = form.get("password");
     if (typeof password === "string" && password.length > 0) {
-      if (password.length < 10) {
-        return { fieldErrors: { password: "كلمة المرور يجب ألا تقل عن ١٠ أحرف" } };
+      // سياسة الإنتاج تُطبَّق دائمًا على حسابات اللوحة (≥ ١٢ حرفًا، ٣ أنواع)
+      const strength = checkAdminPassword(password, {
+        email: typeof data.email === "string" ? data.email : undefined,
+        production: true,
+      });
+      if (!strength.ok) {
+        return { fieldErrors: { password: strength.reasons.join(" ") } };
       }
       data.passwordHash = await hashPassword(password);
-    } else if (typeof id !== "string" || id === "") {
+    } else if (!editingId) {
       return { fieldErrors: { password: "كلمة المرور مطلوبة عند إنشاء مستخدم" } };
     }
   }
 
+  // حفظ الإدارة لنص/تكلفة مبدئية يعني أنها راجعتها
+  if (REVIEWABLE_MODELS.has(resource.model)) data.needsReview = false;
+
   const delegate = delegateFor(resource);
 
   try {
-    if (typeof id === "string" && id !== "") {
-      await delegate.update({ where: { id }, data });
+    const entity = entityName(resource.model);
+
+    if (editingId) {
+      const before = await delegate.findUnique({ where: { id: editingId } });
+      if (!before) return { error: "السجل غير موجود." };
+
+      const saved = await delegate.update({ where: { id: editingId }, data });
+      const changes = diffRecords(before, data);
+
+      if (changes) {
+        const sensitive = resource.model === "adminUser" && ("role" in changes || "isActive" in changes || "passwordHash" in changes);
+        await logAudit({
+          actor: ctx.actor,
+          action: "UPDATE",
+          entity,
+          entityId: editingId,
+          summary: `تعديل ${resource.singular} «${recordLabel(saved)}»${sensitive ? " (صلاحيات/كلمة مرور)" : ""}`,
+          changes,
+          ip: ctx.ip,
+        });
+      }
     } else {
-      await delegate.create({ data });
+      const saved = await delegate.create({ data });
+      await logAudit({
+        actor: ctx.actor,
+        action: "CREATE",
+        entity,
+        entityId: String(saved.id),
+        summary: `إضافة ${resource.singular} «${recordLabel(saved)}»`,
+        changes: diffRecords(null, data),
+        ip: ctx.ip,
+      });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -242,11 +450,9 @@ export async function deleteResourceAction(
   slug: string,
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  try {
-    await requireAdmin();
-  } catch {
-    return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
-  }
+  const auth = await guard();
+  if ("error" in auth) return { ok: false, error: auth.error };
+  const { ctx } = auth;
 
   const resource = getResource(slug);
   if (!resource) return { ok: false, error: "مورد غير معروف." };
@@ -256,15 +462,39 @@ export async function deleteResourceAction(
   // حقول النظام في قالب عرض السعر مرتبطة بمنطق في الكود (مثل تعبئة أنواع
   // المنتجات تلقائيًا)، فحذفها يكسر النموذج. تُخفى بدل أن تُحذف.
   const existing = await delegate.findUnique({ where: { id } });
-  if (existing?.isSystem === true) {
+  if (!existing) return { ok: false, error: "السجل غير موجود." };
+
+  if (existing.isSystem === true) {
     return {
       ok: false,
       error: "هذا حقل أساسي في النموذج ولا يمكن حذفه. أطفئ خيار «ظاهر في النموذج» لإخفائه بدل ذلك.",
     };
   }
 
+  if (resource.model === "page" && typeof existing.slug === "string" && PROTECTED_PAGE_SLUGS.has(existing.slug)) {
+    return {
+      ok: false,
+      error: "هذه صفحة سياسة مرتبطة بروابط الموقع. أخفِها بدل حذفها.",
+    };
+  }
+
+  if (resource.model === "adminUser") {
+    const denied = await guardAdminUserChange(ctx, id, "delete");
+    if (denied) return { ok: false, error: denied };
+  }
+
   try {
     await delegate.delete({ where: { id } });
+
+    await logAudit({
+      actor: ctx.actor,
+      action: "DELETE",
+      entity: entityName(resource.model),
+      entityId: id,
+      summary: `حذف ${resource.singular} «${recordLabel(existing)}»`,
+      changes: diffRecords(null, existing),
+      ip: ctx.ip,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
 
@@ -293,11 +523,9 @@ export async function toggleResourceFieldAction(
   field: string,
   value: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  try {
-    await requireAdmin();
-  } catch {
-    return { ok: false, error: "انتهت جلستك. أعد تسجيل الدخول." };
-  }
+  const auth = await guard();
+  if ("error" in auth) return { ok: false, error: auth.error };
+  const { ctx } = auth;
 
   const resource = getResource(slug);
   if (!resource) return { ok: false, error: "مورد غير معروف." };
@@ -309,9 +537,28 @@ export async function toggleResourceFieldAction(
   if (!allowed) return { ok: false, error: "حقل غير مسموح." };
 
   const delegate = delegateFor(resource);
+  const nextValue = Boolean(value);
+
+  if (resource.model === "adminUser") {
+    const denied = await guardAdminUserChange(ctx, id, { isActive: field === "isActive" ? nextValue : undefined });
+    if (denied) return { ok: false, error: denied };
+  }
 
   try {
-    await delegate.update({ where: { id }, data: { [field]: value } });
+    const before = await delegate.findUnique({ where: { id } });
+    if (!before) return { ok: false, error: "السجل غير موجود." };
+
+    await delegate.update({ where: { id }, data: { [field]: nextValue } });
+
+    await logAudit({
+      actor: ctx.actor,
+      action: "UPDATE",
+      entity: entityName(resource.model),
+      entityId: id,
+      summary: `تعديل ${resource.singular} «${recordLabel(before)}»: ${field} ← ${nextValue ? "نعم" : "لا"}`,
+      changes: { [field]: { from: before[field] ?? null, to: nextValue } },
+      ip: ctx.ip,
+    });
   } catch (error) {
     console.error(`[admin] فشل تبديل ${field}:`, error);
     return { ok: false, error: "تعذّر التحديث." };
