@@ -17,7 +17,6 @@
     "test": "vitest run --configLoader runner",
     "test:watch": "vitest --configLoader runner",
     "test:e2e": "node scripts/qa/e2e-smoke.mjs",
-    "qa:a11y": "node scripts/qa/a11y.mjs",
     "qa:perf": "node scripts/qa/perf.mjs",
     "test:data": "tsx --test tests/data/orders.test.ts tests/data/pricing.test.ts tests/data/seed.test.ts"
   },

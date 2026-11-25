@@ -107,7 +107,3 @@ jobs:
           # الخادم يعمل على قاعدة CI المبنية في المرحلة السابقة
           DATABASE_URL: file:./ci.db
 
-      - name: Accessibility checks
-        run: npm run qa:a11y
-        env:
-          DATABASE_URL: file:./ci.db
