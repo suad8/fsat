@@ -45,7 +45,10 @@ fi
 LOG=""
 start() {
   LOG="$DATA/server-$1.log"
-  (cd "$WORK" && env -u DATABASE_URL DATA_DIR="$DATA" PORT="$PORT" AUTH_SECRET="qa-secret-qa-secret-qa-secret-qa-secret" \
+  # سرّ وكلمة مرور قويان مولَّدان: الحارس الأمني يرفض أي قيمة ضعيفة في الإنتاج
+  (cd "$WORK" && env -u DATABASE_URL DATA_DIR="$DATA" PORT="$PORT" \
+    AUTH_SECRET="$(openssl rand -base64 48)" \
+    ADMIN_EMAIL="owner@qa.invalid" ADMIN_PASSWORD="$(openssl rand -base64 18)aA1!" \
     bash scripts/railway-start.sh) >"$LOG" 2>&1 &
   SERVER_PID=$!
 }
